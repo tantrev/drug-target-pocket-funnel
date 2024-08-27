@@ -1,0 +1,11 @@
+query ran on 12/22/2023 at 7:44pm eastern standard time
+
+SELECT DISTINCT
+  gene_id,
+  MAX(y_proba_full_model) AS max_y_proba_full_model
+FROM
+  `open-targets-genetics.genetics.locus2gene`
+WHERE
+  y_proba_full_model >= 0.5
+GROUP BY
+  gene_id
