@@ -22,8 +22,8 @@ def getPercent(input_x2c,input_df_goods):
         percentList.append((percent,all_good_percent,left_over,checky2.shape[0]))
     return percentList
 
-sitemap_file = "outputs/sitemap_results2.csv"
-sitemap_base_dir = "pdb_processed/"
+sitemap_file = "../outputs/sitemap_results2.csv"
+sitemap_base_dir = "../pdb_processed/"
 
 df = pd.read_csv(sitemap_file)
 cols = ["Entry",]+df.columns[+df.columns.str.contains("sitemap")].tolist() #s_m_entry_name
@@ -47,4 +47,4 @@ for i, file in enumerate(glob.glob(sitemap_base_dir + "/*.pdb")):
         print("FAILED:",file,i)
 
 end_df = pd.concat(subList)
-end_df.to_csv("outputs/sitemap_results_with_quality_metrics.csv", index=None)
+end_df.to_csv("../outputs/sitemap_results_with_quality_metrics.csv", index=None)

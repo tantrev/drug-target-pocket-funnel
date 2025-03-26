@@ -1,15 +1,15 @@
 import org.apache.commons.lang.RandomStringUtils
 
-input_pdb_dir = "/root/Downloads/paper/pdb_processed/*.pdb"
-pdb2fasta_path = "/root/Downloads/pdb2fasta-master/pdb2fasta"
-target_fasta_dir = "/root/Downloads/paper/out_fasta"
-target_search_dir = "/root/Downloads/paper/out_fasta_hits"
-target_search_dir_msa = "/root/Downloads/paper/out_fasta_hits_msa_input"
-target_search_dir_msa_out = "/root/Downloads/paper/out_fasta_hits_msa_output"
-filter_blast_script_path = "/root/Downloads/paper/scripts/filter_blast.py"
-homo_fasta_path = "/root/Downloads/paper/data/UP000005640_9606.fasta"
-extract_script_path = "/root/Downloads/paper/scripts/extract.sh"
-homology_count_output_path = "/root/Downloads/paper/homology_counts.txt"
+input_pdb_dir = "../pdb_processed/*.pdb"
+pdb2fasta_path = "pdb2fasta"
+target_fasta_dir = "../temp/out_fasta"
+target_search_dir = "../temp/out_fasta_hits"
+target_search_dir_msa = "../temp/out_fasta_hits_msa_input"
+target_search_dir_msa_out = "../temp/out_fasta_hits_msa_output"
+filter_blast_script_path = "filter_blast.py"
+homo_fasta_path = "../data/UP000005640_9606.fasta"
+extract_script_path = "extract.sh"
+homology_count_output_path = "../outputs/homology_counts.txt"
 
 
 ch1 = Channel.fromPath(input_pdb_dir)

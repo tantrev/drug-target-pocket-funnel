@@ -1,6 +1,6 @@
 # drug-target-pocket-funnel
 
-This repository contains the scripts, data, and results from the paper "In Silico Target Identification Reveals IL12B as a High-Potential Candidate for Small Molecule Drug Development". It serves as a record of the computational methods used to identify IL12B as a potential drug target for small molecule development.
+This repository contains the scripts, data, and results from the paper "In Silico Target Identification Highlights IL12B as a High-Potential Candidate for Small Molecule Drug Development". It serves as a record of the computational methods used to identify IL12B as a potential drug target for small molecule development.
 
 Contents:
 - Custom scripts used for data processing and analysis

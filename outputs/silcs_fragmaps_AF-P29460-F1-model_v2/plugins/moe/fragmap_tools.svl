@@ -1,0 +1,2480 @@
+#svl
+// inspired from:
+//                                      property_field_consensus_hotspot.svl
+// and
+//      surfmap.svl                     Surfaces and Maps Panel
+//
+//    24-mar-2017 (cw) added GUI from pht_auto_query_create_GUI.svl
+//    23-mar-2017 (cw) created from ph4_auto_query_create.svl
+//
+//   Description:
+//      Given receptor atoms (and optionally ligand atoms) the code computes
+//      property maps such as electrostatic potential, ligand density, contact
+//      statistics etc, and takes an intersection of the property maps
+//      to produce a consensus 'score map.'  The property maps and score maps
+//      are displayed in the GUI which can be used to interactively change
+//      the property fields and parameters included in the intersection
+//      score field. The current default settings are designed for looking
+//      at apo structures because all the ligand-based fields are disabled
+//      in the consensus score.
+//
+//    Usage:
+//      (1) Make sure this SVL file 'property_field_consensus_hotspot.svl'
+//          is loaded.
+//
+//      (2) Load and prepare the system of interest. Make sure the ligand and
+//          receptor atoms are correctly set.
+//
+//      (3) Run this file. A GUI will appear.
+//
+//      (4) Press 'Compute Property Maps' to compute and display the property
+//          maps. The property maps are displayed in line mode
+//
+//      (5) The 'SCORE' field is displayed as solid blobs. The score is
+//          intersection of the property fields. Updating any property field
+//          level will update the SCORE field.
+//
+//------------------------------------------------------------------------------
+#set main 'silcsbio_fragmap_panel'
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
+//
+//
+//------------------------------------------------------------------------------
+// constants
+//------------------------------------------------------------------------------
+//const BUFFER  = 4.0; // grid buffer for near atoms
+const FRAGMAPS_AVAILABLE = [
+    apolar: [
+        label: 'Generic Apolar Map',
+        color: 'green',
+        visible: 1,
+        level: -1.2
+    ],
+    hbdon: [
+        label: 'Generic Donor Map',
+        color: 'blue',
+        visible: 1,
+        level: -1.2
+    ],
+    hbacc: [
+        label: 'Generic Acceptor Map',
+        color: 'red',
+        visible: 1,
+        level: -1.2
+    ],
+    excl: [
+        label: 'Exclusion Map',
+        color: 'sand',
+        visible: 0,
+        level: 0.6,
+        use_surf: 1
+    ],
+    benc: [
+        label: 'Benzene Carbon Map',
+        color: 'purple',
+        visible: 0,
+        level: -1.2
+    ],
+    prpc: [
+        label: 'Propane Carbon Map',
+        color: 'lime',
+        visible: 0,
+        level: -1.2
+    ],
+    meoo: [
+        label: 'Methanol Oxygen Map',
+        color: 'tan',
+        visible: 1,
+        level: -1.2
+    ],
+    forn: [
+        label: 'Formamide Nitrogen Map',
+        color: 'blue',
+        visible: 0,
+        level: -1.2
+    ],
+    foro: [
+        label: 'Formamide Oxygen Map',
+        color: 'red',
+        visible: 0,
+        level: -1.2
+    ],
+    mamn: [
+        label: 'Methylammonium Nitrogen Map',
+        color: 'cyan',
+        visible: 1,
+        level: -1.2
+    ],
+    acec: [
+        label: 'Acetate Oxygen Map',
+        color: 'orange',
+        visible: 1,
+        level: -1.2
+    ],
+    aalo: [
+        label: 'Acetaldehyde Oxygen Map',
+        color: 'red',
+        visible: 0,
+        level: -1.2
+    ],
+    iminh: [
+        label: 'Imidazole Donor Nitrogen',
+        color: 'blue',
+        visible: 0,
+        level: -1.2
+    ],
+    imin: [
+        label: 'Imidazole Acceptor Nitrogen',
+        color: 'red',
+        visible: 0,
+        level: -1.2
+    ],
+    tipo: [
+        label: 'Water Oxygen Map',
+        color: 'black',
+        visible: 0,
+        level: -0.5
+    ],
+    clbx: [
+        label: 'Chlorobenzene Map',
+        color: 'pink',
+        visible: 0,
+        level: -1.2
+    ],
+    flbx: [
+        label: 'Fluorobenzene Map',
+        color: 'blue',
+        visible: 0,
+        level: -1.2
+    ],
+    brbx: [
+        label: 'Bromobenzene Map',
+        color: 'brown',
+        visible: 0,
+        level: -1.2
+    ],
+    clex: [
+        label: 'Chloroethane Map',
+        color: 'green',
+        visible: 0,
+        level: -1.2
+    ],
+    flex: [
+        label: 'Fluoroethane Map',
+        color: 'green',
+        visible: 0,
+        level: -1.2
+    ],
+    tfec: [
+        label: 'Trifluoroethane Map',
+        color: 'green',
+        visible: 0,
+        level: -1.2
+    ],
+    dmeo: [
+        label: 'Dimethyl-ethoxide Map',
+        color: 'red',
+        visible: 0,
+        level: -1.2
+    ]
+];
+
+/*
+const FRAGMAPS_ENABLED = [
+    'apolar', 'hbdon', 'hbacc', 'excl',
+    'benc', 'prpc', 'meoo', 'forn', 'foro',
+    'mamn', 'acec', 'aalo', 'iminh', 'imin',
+    'tipo', 'flbx', 'clbx', 'brbx', 'flex',
+    'clex', 'tfec','dmeo'
+];
+*/
+const FRAGMAPS_ENABLED = [
+    'apolar', 'hbdon', 'hbacc', 'excl'
+];
+
+
+const HOTSPOT_DEFAULTS = [
+
+
+            // ===== LIGAND ATOM DISTANCE FIELD =======
+    HYD_LigDistance_use:        0,      //-flag for LigDistance  in field score
+    HYD_LigDistance_level:      1.0,    // default ligand radius for field
+    HYD_LigDistance_sign:       1.0,
+    HYD_LigDistance_thresh:     '<=',
+    HYD_LigDistance_range:      [0,3],  // default ligand radius for field
+    HYD_LigDistance_color:      icolor 'gray',// ligand field color
+    HYD_LigDistance_style:      'Line', //  ligand graphic
+
+    ACC_LigDistance_use:        0,      //-flag for LigDistance in field score
+    ACC_LigDistance_level:      1.0,    // default ligand radius for field
+    ACC_LigDistance_sign:       1.0,
+    ACC_LigDistance_thresh:     '<=',
+    ACC_LigDistance_range:      [0,3],  // default ligand radius for field
+    ACC_LigDistance_color:      icolor 'gray',// ligand field color
+    ACC_LigDistance_style:      'Line', //  ligand graphic
+
+    DON_LigDistance_use:        0,      //-flag for LigDistance in field score
+    DON_LigDistance_level:      1.0,    // default ligand radius for field
+    DON_LigDistance_sign:       1.0,
+    DON_LigDistance_thresh:     '<=',
+    DON_LigDistance_range:      [0,3],  // default ligand radius for field
+    DON_LigDistance_color:      icolor 'gray',// ligand field color
+    DON_LigDistance_style:      'Line',         //  ligand graphic
+            // ==========================================
+
+            // ==== LIGAND ANNOTATION POINT FIELDS ======
+    HYD_LigAnnot_use:           0,      // use ligand annotation points for HYD
+    HYD_LigAnnot_level:         1.0,    // annotation point radius (A)
+    HYD_LigAnnot_sign:          1.0,
+    HYD_LigAnnot_thresh:        '<=',
+    HYD_LigAnnot_range:         [0,3],  // annotation point range
+    HYD_LigAnnot_color:         icolor 'green', // GO color
+    HYD_LigAnnot_style:         'Line', // GO style
+
+    ACC_LigAnnot_use:           0,      // use ligand annotation points fro ACC
+    ACC_LigAnnot_level:         1.0,    // annotation point radius (A)
+    ACC_LigAnnot_sign:          1.0,
+    ACC_LigAnnot_thresh:        '<=',
+    ACC_LigAnnot_range:         [0,3],
+    ACC_LigAnnot_color:         icolor 'cyan',  // GO color
+    ACC_LigAnnot_style:         'Line', // GO style
+
+    DON_LigAnnot_use:           0,      // use ligand annotation point for DON
+    DON_LigAnnot_level:         1.0,    // annotation point radius (A)
+    DON_LigAnnot_sign:          1.0,
+    DON_LigAnnot_thresh:        '<=',
+    DON_LigAnnot_range:         [0,3],
+    DON_LigAnnot_color:         icolor 'magenta',// GO color
+    DON_LigAnnot_style:         'Line', // GO style
+
+    ARO_LigAnnot_use:           0,      // use ligand annotation points for ARO
+    ARO_LigAnnot_level:         1.0,    // annotation point radius (A)
+    ARO_LigAnnot_sign:          1.0,
+    ARO_LigAnnot_thresh:        '<=',
+    ARO_LigAnnot_range:         [0,3],
+    ARO_LigAnnot_color:         icolor 'orange', // GO color
+    ARO_LigAnnot_style:         'Line', // GO style
+             //==========================================
+
+
+            // === PB ELECTROSTATIC MAP FIELDS ==========
+    HYD_PB_use:                 1,      // use HYDPB map in score
+    HYD_PB_level:               -3,     // minimum HYD PB energy threshold
+    HYD_PB_sign:                1.0,
+    HYD_PB_thresh:              '<=',
+    HYD_PB_range:               [-5,0],
+    HYD_PB_color:               icolor 'green',// GO color
+    HYD_PB_style:               'Line', // GO style
+
+    ARO_PB_use:                 1,      // use HYDPB map in score
+    ARO_PB_level:               -3,     // minimum HYD PB energy threshold
+    ARO_PB_sign:                1.0,
+    ARO_PB_thresh:              '<=',
+    ARO_PB_range:               [-5,0],
+    ARO_PB_color:               icolor 'orange',// GO color
+    ARO_PB_style:               'Line', // GO style
+
+
+    ACC_PB_use:                 1,      // use ACCPB map in score
+    ACC_PB_level:               -2,     // minimum ACC PB energy threshold
+    ACC_PB_sign:                1.0,
+    ACC_PB_thresh:              '<=',
+    ACC_PB_range:               [-5,0],
+    ACC_PB_color:               icolor 'red',   // GO color
+    ACC_PB_style:               'Line', // GO style
+
+    DON_PB_use:1,               // use  DONPB map in score
+    DON_PB_level:-2,            // minimum DON PB energy threshold
+    DON_PB_sign:1.0,
+    DON_PB_thresh:'<=',
+    DON_PB_range:[-5,0],
+    DON_PB_color:icolor 'blue', // GO color
+    DON_PB_style:'Line',        // GO style
+             //==========================================
+
+            //========== RECEPTOR ANNOTATION POINT FIELDS
+    ACC_RecAnnot_use:1,         // use receptor annotation  for ACC
+    ACC_RecAnnot_level:1,       // annotation poinr radius (A)
+    ACC_RecAnnot_sign:1.0,
+    ACC_RecAnnot_thresh:'<=',
+    ACC_RecAnnot_range:[0,3],   //
+    ACC_RecAnnot_color:icolor 'cyan',// GO color
+    ACC_RecAnnot_style:'Line',  // GO style
+
+    DON_RecAnnot_use:0,         // use receptor annotation  for DON
+    DON_RecAnnot_level:1,       // annotation poinr radius (A)
+    DON_RecAnnot_sign:1.0,
+    DON_RecAnnot_thresh:'<=',
+    DON_RecAnnot_range:[0,3],   //
+    DON_RecAnnot_color:icolor 'magenta',// GO color
+    DON_RecAnnot_style:'Line',  // GO sytle
+             //==========================================
+
+
+             //======== Contact Statistics ==============
+    HYD_CST_use:1,              // use ligand annotation points for HYD
+    HYD_CST_level:90.0,         // annotation point radius (A)
+    HYD_CST_sign:-1.0,
+    HYD_CST_thresh:'>=',
+    HYD_CST_range:[0,100],      // annotation point range
+    HYD_CST_color:icolor 'green', // GO color
+    HYD_CST_style:'Line',       // GO style
+
+    ACC_CST_use:1,              // use ligand annotation points fro ACC
+    ACC_CST_level:90.0, // annotation point radius (A)
+    ACC_CST_sign:-1.0,
+    ACC_CST_thresh:'>=',
+    ACC_CST_range:[0,100],
+    ACC_CST_color:icolor 'cyan',        // GO color
+    ACC_CST_style:'Line',       // GO style
+
+    DON_CST_use:1,      // use ligand annotation point for DON
+    DON_CST_level:90.0, // annotation point radius (A)
+    DON_CST_sign:-1.0,
+    DON_CST_thresh:'>=',
+    DON_CST_range:[0,100],
+    DON_CST_color:icolor 'magenta',// GO color
+    DON_CST_style:'Line',       // GO style
+
+    ARO_CST_use:1,              // use ligand annotation points for ARO
+    ARO_CST_level:90.0,         // annotation point radius (A)
+    ARO_CST_sign:-1.0,
+    ARO_CST_thresh:'>=',
+    ARO_CST_range:[0,100],
+    ARO_CST_color:icolor 'orange', // GO color
+    ARO_CST_style:'Line',       // GO style
+             //==========================================
+
+            // ===== AlphaCenter DISTANCE FIELD =======
+    HYD_AlphaCenters_use:1,             //-flag for AlphaCenters in score
+    HYD_AlphaCenters_level:1.0,         // default alpha center radius
+    HYD_AlphaCenters_sign:1.0,
+    HYD_AlphaCenters_thresh:'<=',
+    HYD_AlphaCenters_range:[0,3],       // default range for field
+    HYD_AlphaCenters_color:icolor 'white',// field color
+    HYD_AlphaCenters_style:'Line',      //  alpha center graphic
+
+    ARO_AlphaCenters_use:1,             //-flag for AlphaCenters in score
+    ARO_AlphaCenters_level:1.0,         // default alpha center radius
+    ARO_AlphaCenters_sign:1.0,
+    ARO_AlphaCenters_thresh:'<=',
+    ARO_AlphaCenters_range:[0,3],       // default range
+    ARO_AlphaCenters_color:icolor 'white',// alpha center field color
+    ARO_AlphaCenters_style:'Line',      //  alpha center graphic
+
+    ACC_AlphaCenters_use:1,             //-flag for AlphaCenters in score
+    ACC_AlphaCenters_level:1.0,         // default alpha center radius
+    ACC_AlphaCenters_sign:1.0,
+    ACC_AlphaCenters_thresh:'<=',
+    ACC_AlphaCenters_range:[0,3],       // default range
+    ACC_AlphaCenters_color:icolor 'white',// alpha center field color
+    ACC_AlphaCenters_style:'Line',      //  alpha center graphic
+
+    DON_AlphaCenters_use:0,             //-flag for AlphaCenters in score
+    DON_AlphaCenters_level:1.0,         // default alpha center radius
+    DON_AlphaCenters_sign:1.0,
+    DON_AlphaCenters_thresh:'<=',
+    DON_AlphaCenters_range:[0,3],       // default range
+    DON_AlphaCenters_color:icolor 'white',// alpha center field color
+    DON_AlphaCenters_style:'Line',      //  alpha center graphic
+            // ==========================================
+
+
+            // ==== Omnidirectional Carbonyl Field ======
+    DON_OmniAcceptor_use:0,             //-flag for OmniAcceptor in score
+    DON_OmniAcceptor_level:0.6,         // default level (MF notes 0.6 best)
+    DON_OmniAcceptor_sign:-1.0,
+    DON_OmniAcceptor_thresh:'>=',
+    DON_OmniAcceptor_range:[0,1],       // default range
+    DON_OmniAcceptor_color:icolor 'magenta',// color
+    DON_OmniAcceptor_style:'Line',      //  graphic
+            // =======
+
+            // ==== Omnidirectional Cation Field ======
+    ARO_OmniCation_use:0,               //-flag for OmniCation in score
+    ARO_OmniCation_level:0.5,           // default alpha center radius
+    ARO_OmniCation_sign:-1.0,
+    ARO_OmniCation_thresh:'>=',
+    ARO_OmniCation_range:[0,1], // default range
+    ARO_OmniCation_color:icolor 'orange',// color
+    ARO_OmniCation_style:'Line',        //  alpha center graphic
+            // =======
+
+
+            // ==== Omnidirectional Cation Field ======
+    ACC_OmniMetal_use:0,                //-flag for OmniMetal in score
+    ACC_OmniMetal_level:0.5,            // default alpha center radius
+    ACC_OmniMetal_sign:-1.0,
+    ACC_OmniMetal_thresh:'>=',
+    ACC_OmniMetal_range:[0,1],  // default range
+    ACC_OmniMetal_color:icolor 'orange',// color
+    ACC_OmniMetal_style:'Line',         //  alpha center graphic
+            // =======
+
+/*
+            // ==== Omnidirectional CH Field ======
+    ARO_OmniCH_use:1,           //-flag for OmniCH in score
+    ARO_OmniCH_level:0.5,               // default alpha center radius
+    ARO_OmniCH_sign:-1.0,
+    ARO_OmniCH_thresh:'>=',
+    ARO_OmniCH_range:[0,1],     // default range
+    ARO_OmniCH_color:icolor 'orange',// color
+    ARO_OmniCH_style:'Line',    //  alpha center graphic
+            // =======
+*/
+        // field centers
+    HYD_center:'HYD_SCORE',
+    ARO_center:'ARO_SCORE',
+    ACC_center:'ACC_SCORE',
+    DON_center:'DON_SCORE'
+
+];
+//------------------------------------------------------------------------------
+//presets - presets only need to list setting which differ from defaults
+const REC_SETS = tr [
+    ['Receptor',                'rec'],
+    ['Receptor+Solvent',        'rec+sol'],
+    ['Selected Atoms',          'asel']
+];
+const LIG_SETS = tr[
+    ['Ligand',                  'lig'],
+    ['Selected Atoms',          'asel'],
+    ['<none>',                  '']
+];
+const NEAR_SETS = tr[
+    ['Ligand',                  'lig'],
+    ['Selected Atoms',          'asel']
+];
+const STYLE = ['Dot','Line','Solid'];
+const CUTOFF  = 4.5;
+const SPACING = 0.3;
+const THRESH_FCN = tr [
+    ['>=', 'geE'],
+    ['<=', 'leE'],
+    ['>',  'gtE'],
+    ['<',  'ltE'],
+    ['==', 'eqE'],
+    ['<>', 'neE']
+];
+//------------------------------------------------------------------------------
+//
+//
+//------------------------------------------------------------------------------
+function hclust_tree, hclust_list;
+//------------------------------------------------------------------------------
+//
+//
+//------------------------------------------------------------------------------
+// function xyz_clusters
+//      -used hclust_ function to cluster XYZ points
+//------------------------------------------------------------------------------
+local function xyz_clusters [xyz, cutoff, method]
+    if isnull method then method = 'single'; endif
+    if isnull cutoff then cutoff = 1.5; endif
+    if isnull cat xyz then return []; endif
+
+    local [x,y,z] = xyz;
+    local b_radii            = 0.1;
+    local bucket_size        = 0.2+cutoff+b_radii;
+    local prox_key           = prox_open [bucket_size,   xyz, b_radii ];
+    local [seg,idx,sqr_dist] = prox_find [prox_key, xyz, cutoff];
+
+        // split idx and sqr_dist based on seg to get a list of indices
+        // and distances for refatoms proximal to search
+    local pidx      = igen length xyz(1);
+    local nbr_idx   = split[idx, seg];
+    local nbr_dist  = split[sqrt sqr_dist, seg];
+    local p1 = apt rep[pidx, app length nbr_idx];
+
+    local smask = (nbr_idx <> p1);
+    p1       = cat (p1       || smask);
+    nbr_idx  = cat (nbr_idx  || smask);
+    nbr_dist = cat (nbr_dist || smask);
+
+    local dmat  = [p1,nbr_idx, nbr_dist];
+    local htree_dist = hclust_tree['single',dmat,[max_score:cutoff]];
+    local clust_idx_dist = hclust_list [htree_dist,cutoff];
+
+    local clusts = apt get[[pidx], clust_idx_dist];
+
+    local sidx = diff[pidx, cat clusts];
+    clusts = cat[clusts, sidx];
+
+    local i, xyz_clusts;
+    for i = 1, length clusts loop
+        xyz_clusts(i)  = [x[clusts(i)], y[clusts(i)], z[clusts(i)]];
+    endloop
+
+        // if clustering failed (one point, etc) then simply return xyz
+    if (isnull xyz_clusts) and (not isnull xyz) then
+        xyz_clusts = [(app add xyz)/(length first xyz)];
+    endif
+
+    return xyz_clusts;
+endfunction
+//------------------------------------------------------------------------------
+//
+//
+//------------------------------------------------------------------------------
+// function property_field_consensus_hotspot_Const []
+//     returns default
+//------------------------------------------------------------------------------
+function property_field_consensus_hotspot_Const []
+    return HOTSPOT_DEFAULTS;
+endfunction
+//------------------------------------------------------------------------------
+// function property_field_consensus_hotspot_CalcOpts
+//      return vestor of untagged opts
+//      [Type, fcn, use, level, range, color]
+//------------------------------------------------------------------------------
+global function property_field_consensus_hotspot_CalcOpts opts
+    local use_str    = app string findmatch['*_use', tags opts];
+    local fcn_base1  = app token apt drop[use_str, -4];
+
+        // fields used for centers
+    local center_str = cat tagget [opts, findmatch['*_center', tags opts]];
+    center_str  = center_str | not m_findmatch['*SCORE*', center_str];
+    local fcn_base2  = center_str;
+
+        // combine use and center fields into a list of unique fields
+    local fcn_base = uniq cat [fcn_base1, fcn_base2];
+
+    local i;
+
+    local typ, use, level, range, color, fcn, center, is_center;
+    for i = 1, length fcn_base loop
+        local fcn_i   = tok_cat [fcn_base(i), '*'];
+        local fcn_tgs = findmatch [fcn_i, tags opts];
+        typ(i)        = token first wordsplit[string fcn_tgs(1), "_"];
+        fcn(i)        = token second wordsplit[string fcn_tgs(1), "_"];
+        use(i)        = cat tagget[opts, tok_cat [fcn_base(i), '_use'  ]];
+        level(i)      = cat tagget[opts, tok_cat [fcn_base(i), '_level']];
+        range(i)      = cat tagget[opts, tok_cat [fcn_base(i), '_range']];
+        color(i)      = cat tagget[opts, tok_cat [fcn_base(i), '_color']];
+        center(i)     = cat tagget[opts, tok_cat[typ(i), '_', 'center']];
+        is_center(i)  = not isnull join[fcn_base2, fcn_base(i)];
+    endloop
+    return [typ, use, level, range, color, fcn, center, is_center];
+endfunction
+//------------------------------------------------------------------------------
+//    function property_field_consensus_hotspot_InitializeAtoms
+//      initialize the atom sets - takes keys or selection expression
+//              rec_atoms       -all receptor atom
+//              pocket_atoms    -entire residue of receptor atoms in grid
+//              lig_atoms       -small-molecule ligand
+//              near_atoms      -atoms whose positions define grid
+//------------------------------------------------------------------------------
+global function property_field_consensus_hotspot_InitializeAtoms opts
+
+        // receptor - keys or expression
+    local rkeys=[];
+    if isnull opts.rec_atoms  then
+        opts.rec_atoms   = 'Receptor';
+    endif
+    local rec_atoms  = opts.rec_atoms;
+    if (uniq (type rec_atoms)) === 'num' then // rec keys
+        if not andE ((oType rec_atoms) =='atom') then
+            opts.rec_atoms = [];
+        else
+            rkeys = rec_atoms;
+        endif
+    endif
+    if isnull rkeys then
+        local r_expr_idx =indexof[opts.rec_atoms, REC_SETS(1)];
+        local rec_expr;
+        if r_expr_idx then
+            rec_expr=REC_SETS(2)(r_expr_idx);
+        else
+            if eqL['', _SelectExprSyntax rec_atoms] then
+                rec_expr = rec_atoms;
+            else
+                rec_expr  = 'rec';
+            endif
+        endif
+        rkeys = _Atoms rec_expr;
+    endif
+
+        // near atoms - keys or expression
+    local nkeys=[];
+    if isnull opts.near_atoms then
+        opts.near_atoms  = 'lig';
+    endif
+    local near_atoms = opts.near_atoms;
+    if (uniq (type near_atoms)) === 'num' then // rec keys
+        if not andE ((oType near_atoms)=='atom') then
+            opts.near_atoms = [];
+        else
+            nkeys = near_atoms;
+        endif
+    endif
+    if isnull nkeys then
+        local n_expr_idx =indexof[opts.near_atoms, NEAR_SETS(1)];
+        local near_expr;
+        if n_expr_idx then
+            near_expr=NEAR_SETS(2)(n_expr_idx);
+        else
+            if eqL['', _SelectExprSyntax near_atoms] then
+                near_expr = near_atoms;
+            else
+                near_expr  = 'lig';
+            endif
+        endif
+        nkeys = _Atoms near_expr;
+    endif
+
+        //ligand atoms - keys or expression
+    local lkeys=[];
+    if isnull opts.lig_atoms then
+        opts.lig_atoms   = 'lig';
+    endif
+    local lig_atoms  = opts.lig_atoms;
+    if (uniq (type lig_atoms)) == 'num' then // rec keys
+        if not andE ((oType lig_atoms)=='atom') then
+            opts.lig_atoms = [];
+        else
+            lkeys = lig_atoms;
+        endif
+    endif
+    if isnull lkeys then
+        local l_expr_idx =indexof[opts.lig_atoms, LIG_SETS(1)];
+        local lig_expr;
+        if l_expr_idx then
+            lig_expr=LIG_SETS(2)(l_expr_idx);
+        else
+            if eqL['', _SelectExprSyntax lig_atoms] then
+                lig_expr = lig_atoms;
+            else
+                lig_expr  = 'lig';
+            endif
+        endif
+        lkeys = _Atoms lig_expr;
+    endif
+
+    rec_atoms  = rkeys;
+    near_atoms = nkeys;
+    lig_atoms  = lkeys;
+
+    if isnull rec_atoms  then return ['Error','Empty Receptor Atom Set'];endif
+    if isnull near_atoms then return ['Error','Empty Near Atom Set']; endif
+
+    if isnull opts.cutoff then opts.cutoff = CUTOFF; endif
+    local cutoff = opts.cutoff;
+
+    local pos    = aPos near_atoms;
+    local minpt  = app min (pos - [cutoff]);
+    local maxpt  = app max (pos + [cutoff]);
+
+        // get receptor atoms in grid and extend to residue - 'pocket atoms'
+    local rpos          = aPos rec_atoms;
+    local near_msk      = andE ((rpos > minpt) and (rpos < maxpt));
+    near_atoms          = rec_atoms | near_msk;
+    local u_near_res    = uniq aResidue near_atoms;
+    local pocket_atoms  = cat ([rec_atoms]||[aResidue rec_atoms] == u_near_res);
+
+    return [rec_atoms, pocket_atoms, lig_atoms, near_atoms];
+endfunction
+//------------------------------------------------------------------------------
+// function property_field_consensus_hotspot_InitializeGrid opts
+//------------------------------------------------------------------------------
+global function property_field_consensus_hotspot_InitializeGrid opts;
+    local near_atoms = opts.near_atoms;
+    local p0 = aPos near_atoms;
+    local minpt = app min p0;
+    local maxpt = app max p0;
+
+        // get spacing from maxMb (see surf map) find spacing based on maxMb
+    local maxMb = opts.maxMb;
+    if isnull maxMb then maxMb = 2.0; endif
+    maxMb = min [pow[2,24] * 8, max [1.0, maxMb]];
+    if isnull opts.spacing then opts.spacing = SPACING; endif
+    local spacing = opts.spacing;
+    local ndim;
+    loop
+        ndim = maxE [2, 1 + ceil ((maxpt - minpt) / spacing)];
+        if mul ndim * 8 <= sqr 1024 * maxMb then break; endif
+        spacing = spacing + 0.05;
+    endloop
+    local shape = minpt + dec app igen ndim * spacing;
+    shape = shape - 0.5 * (app max shape - maxpt);
+    return shape;
+endfunction
+//------------------------------------------------------------------------------
+// function property_field_consensus_hotspot_CalcFields
+//      -computes raw field data
+//------------------------------------------------------------------------------
+function property_field_consensus_hotspot_CalcFields[init_opts,calc_opts]
+    local [typ, use, level, range, color, fcn, center, is_center] = calc_opts;
+
+    local ufcn    = uniq fcn;
+    local fcn_idx = indicesof[ufcn, fcn];
+    local center_fcn = uniq (fcn | is_center);
+    local center_fcn_idx = indicesof[center_fcn, fcn];
+
+
+    local i;
+    local field_data = [];
+    local field_info = [];
+    local msg = Message[0,''];
+    for i = 1, length ufcn loop
+
+            // skip field only if all are off
+        local use_flgs    = use[fcn_idx(i)];
+        local center_flgs = is_center[center_fcn_idx(i)];
+        if (not orE use_flgs) and (not orE center_flgs) then continue; endif
+
+        Message[msg, token swrite['Computing {} Field', ufcn(i)]];
+        local new_field_data = call[ufcn(i), init_opts];
+        field_data = tagcat[field_data, new_field_data];
+    endloop
+
+    field_data.shape = init_opts(1);   // keep track of shape
+    Message[msg, []];
+    return field_data;
+endfunction
+//------------------------------------------------------------------------------
+// function property_field_consensus_hotspot_CalcScores
+//      -computes score from field data and options
+//------------------------------------------------------------------------------
+global function property_field_consensus_hotspot_CalcScores [field_data, opts]
+    local typs  = first property_field_consensus_hotspot_CalcOpts opts;
+    local shape = field_data.shape;
+    local grid0 = zero igen mul app length shape;
+    local score_typs = uniq typs;
+    local center;
+
+        // filter types based on fields passed to function
+    local afields = tags field_data;
+    afields = diff[afields, 'shape'];
+    afields = uniq app token app first apt wordsplit[app string afields, "_"];
+    score_typs = afields;
+
+    local i,k, score_data;
+    for i =1, length score_typs loop
+
+            // get center
+        center = apt tok_cat[score_typs(i), '_center'];
+        center = app first tagget[opts, center];
+
+            // poke in use_field=1 for any field that is a center
+           // (even if the field is not enabled in the ccore)
+        if isnull center then
+            center = 'score_field';
+        endif
+
+
+        local cscore_fields = findmatch[
+           tok_cat[score_typs(i),'*'],  tags field_data
+        ];
+        local ctag = tok_cat[score_typs(i), '_SCORE'];
+
+        local use_flags    = apt tok_cat[cscore_fields, '_use'];
+        local levels       = apt tok_cat[cscore_fields, '_level'];
+        local signs        = apt tok_cat[cscore_fields, '_sign'];
+        local threshs      = apt tok_cat[cscore_fields, '_thresh'];
+
+        local cscore_data =  tagget[field_data, cscore_fields];
+        use_flags    = tagget[opts, use_flags];
+        levels       = tagget[opts, levels];
+        signs        = tagget[opts, signs];
+        threshs      = tagget[opts, threshs];
+
+        levels  | app isnull levels = 1;
+        signs   | app isnull signs  = 1;
+        threshs | app isnull threshs = '<=';
+
+        threshs = get [THRESH_FCN(2), indexof[threshs, THRESH_FCN(1)]];
+
+        if not add use_flags then
+            score_data.(ctag) = grid0;
+            continue;
+        endif
+
+
+        local cdata=[];
+        local cfields=[];
+        local clevels=[];
+        local cscore=[];
+        local csigns=[];
+        local cthreshs=[];
+        cfields = cscore_fields | use_flags;
+        cdata   = cscore_data   | use_flags;
+        clevels = levels        | use_flags;
+        csigns  = signs         | use_flags;
+        cthreshs= threshs       | use_flags;
+
+            // flatten any mutiple fields for a flat scorescore
+        local fdata = cdata;
+        for k=1,length fdata loop
+            if not isflat fdata(k) then
+                fdata(k) = minE fdata(k);
+            endif
+        endloop
+
+        local tdata=[];
+        for k = 1, length fdata loop
+            tdata(k) = call[cthreshs(k), [fdata(k), clevels(k)]];
+        endloop
+        local fscore = andE tdata;;
+
+        if (eqL[center,'score_field']) or
+           (not (isnull findmatch['*SCORE*', center])) then
+                // score center is intersection of property fields
+           cscore  = fscore;
+        endif
+
+        score_data.(ctag) = cscore;
+    endloop
+
+        // keep track of shape
+    score_data.shape = field_data.shape;
+    return score_data;
+endfunction
+//------------------------------------------------------------------------------
+//
+//
+//
+//==============================================================================
+//------------------------------------------------------------------------------
+//-----------------------------MAIN ENGINE -------------------------------------
+function property_field_consensus_hotspot_Create opts;
+
+        // deal with presets options opts.apply_preset == 'Holo', 'Default'
+    local nopts = [];
+
+        // get options, preset overwrites and defaults
+    opts = tagcat[opts, nopts, HOTSPOT_DEFAULTS];
+
+        // initialize system - change?
+    local atom_opts = property_field_consensus_hotspot_InitializeAtoms opts;
+    if first atom_opts === 'Error' then
+        Warning second atom_opts;
+        exit[];
+    endif
+    local [rec_atoms,pocket_atoms,lig_atoms,near_atoms] = atom_opts;
+    if isnull pocket_atoms then
+        Warning 'No near receptor atoms';
+        exit[];
+    endif
+    opts.near_atoms = near_atoms;
+    local shape = property_field_consensus_hotspot_InitializeGrid opts;
+    local init_opts = [shape, rec_atoms, pocket_atoms, lig_atoms];
+
+        // get calculation options based on opts and defaults
+    local calc_opts = property_field_consensus_hotspot_CalcOpts opts;
+
+        // field calculation
+    local field_data = property_field_consensus_hotspot_CalcFields[
+        init_opts,calc_opts
+    ];
+
+        // score calculation
+    local score_data = property_field_consensus_hotspot_CalcFields [
+        field_data, opts
+    ];
+
+endfunction
+//==============================================================================
+//--------------------------- end main engine ----------------------------------
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//------------------------------------------------------------------------------
+//&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+//------------------ ADD PROPERTY FIELDS AFTER THIS POINT ----------------------
+//==============================================================================
+//-------------------------- Field Functions -----------------------------------
+//------------------------------------------------------------------------------
+// Field functions must have following format
+// function XXX [shape, rec_atoms, pocket_atoms, lig_atoms
+//
+//      ... compute
+//
+//      return [
+//          [TYP1_XXX:data1, TYP2_XXX:data2...]// tagged field data
+//          [TYP1_XXX:info1, TYP2_XXX:info2...]//info about field (often [])
+//      ]
+// endfunction
+//------------------------------------------------------------------------------
+//
+//
+//==============================================================================
+//------------------------------------------------------------------------------
+// ===================== PB - electrostatic field maps =========================
+//------------------------------------------------------------------------------
+function pboltz_AtomParameters;
+function pboltz_Potential;
+function pboltz_vdwGrid;
+//------------------------------------------------------------------------------
+// function get_PB_grid_data
+//      -lifted from E_MakeSurface surfmap.svl.
+//      -given an opts vector
+//
+//      opts = [
+//              grid:   grid_data,
+//              shape:  cur_shape_data,
+//              rec_pos: receptor atom positions
+//              res_Q:   receptor atom charges
+//              rec_PB:  PB atom paranetereds
+//
+//
+//      -returns a vector
+//      [gridshape, [hyd_griddata, acc_griddata, don_griddata]]
+//------------------------------------------------------------------------------
+local function get_PB_grid_data opts;
+    local maxMb = 8; // [4,8,16] quality
+
+        // get coordinates of master grid from calling function
+    local grid      = opts.grid;
+    local old_shape = opts.shape;
+    local grid_xyz  = grid_coord[opts.shape, igen length grid];
+
+    local cpos     = opts.rec_pos;              // receptor positions
+    local cQ       = opts.rec_Q;                // receptor charge
+    local cpos_REd = opts.rec_PB;               // PB atom parameters
+    local extend   = 4.5;                       // default near
+
+    const CONC = 1;                     // ionic concentration (mol/L)
+    local ion_REdqC = tr [
+        [ 1.65, 0.150,  1.0,    -0.82,  CONC ],
+        [ 1.00, 0.020,  1.0,     0.41,  CONC ]
+    ];
+    const HYD_REdqC = [2.0, 0.150, 1.0, 1.0, CONC];
+
+    local pb_opt = [
+        T:              300,
+        spacing:        '65x65x65',
+        linear:         0,
+        verbose:        0
+    ];
+    local map = [];
+    map.shape = old_shape;
+
+    local prio = task_prio 2;
+    local [E, sshape, u] = pboltz_Potential [
+        map.shape, cpos, cpos_REd, cQ, ion_REdqC, pb_opt
+    ];
+
+    local i;
+    local beta = ion_REdqC(4) * (COULOMB_SCALE*4*PI);
+    local data = [pboltz_vdwGrid[sshape, 0, cpos, cpos_REd, HYD_REdqC, pb_opt]];
+
+    for i = 1, length beta loop
+        local t = beta(i) * u;
+        data(i+1) = pboltz_vdwGrid [
+            sshape, t, cpos, cpos_REd, apt peek [ion_REdqC,i], pb_opt
+        ];
+        data(1) = data(1) - t;
+    endloop
+    task_prio prio;
+
+        // 1 = HYD
+        // 2 = ACC
+        // 3 = DON
+    local rdata = [];
+    for i = 1, length data loop
+        local new_data = data(i);
+        new_data | new_data  >  0 = 0;  // clamp E values`
+        new_data | new_data == -0 = 0;
+        rdata(i) = new_data;
+    endloop
+
+    return [sshape, rdata];
+endfunction
+//------------------------------------------------------------------------------
+///
+//------------------------------------------------------------------------------
+function PB [shape, rec_atoms, near_atoms, lig_atoms];
+    local rec_PB   = pboltz_AtomParameters rec_atoms;
+    local rec_Q    = aCharge rec_atoms;
+    local rec_pos  = aPos rec_atoms;
+
+    local grid0 = zero igen mul app length shape;
+    local [pbshape, [pbdata_hyd,pbdata_acc,pbdata_don]]=get_PB_grid_data [
+        grid:   grid0,
+        shape:  shape,
+        rec_pos:        rec_pos,
+        rec_Q:  rec_Q,
+        rec_PB: rec_PB
+    ];
+
+    pbdata_hyd| pbdata_hyd > 0 = 0;//opts.HYD_PB_level = 0;
+    pbdata_acc| pbdata_acc > 0 = 0;//opts.ACC_PB_level = 0;
+    pbdata_don| pbdata_don > 0 = 0;//opts.DON_PB_level = 0;
+
+            // set extreme values to 0 (to match surfaces and maps
+    pbdata_hyd| pbdata_hyd < -5 = 0;
+    pbdata_acc| pbdata_acc < -5 = 0;
+    pbdata_don| pbdata_don < -5 = 0;
+
+    local info = [];
+
+    return [
+            HYD_PB:pbdata_hyd,
+            ACC_PB:pbdata_acc,
+            DON_PB:pbdata_don,
+            ARO_PB:pbdata_hyd
+    ];
+endfunction
+//------------------------------------------------------------------------------
+//-----------------------------  end PB ----------------------------------------
+//==============================================================================
+//
+//
+//
+//
+//==============================================================================
+// ---------- RecAnnot - receptor annotation points field map ------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+function ph4_AnnotationAidx, ph4_AnnotationRec;
+function ph4_SchemeBitsColor,ph4_SchemeBitsExpr;
+function ph4_AnnotationMap,ph4_AnnotationPos;
+function ph4_AnnotationPairs;
+function ph4_ExprColor, ph4_SchemeDefmask;
+//------------------------------------------------------------------------------
+// function ph4_rec_annotation_points opts
+//      given opts = [atoms:atoms, scheme:'scheme token'] function
+//      returns the receptor annotation points, colors and types (expression)
+//------------------------------------------------------------------------------
+const OPT_R = [
+    use_Hs:     1,
+    no_alpha:   1, // no alpha-sphere restriction
+    _sol:       0,
+    eatoms:     [],
+    exclude_rscale:0.0,
+    exclude_pscale:0.0 // scale=0 to get all pocket points
+];
+local function ph4_rec_annotation_points opts
+    local rec_atoms    = opts.rec_atoms;
+    local pocket_atoms = opts.pocket_atoms;
+    if isnull pocket_atoms then pocket_atoms = rec_atoms; endif
+
+    local atoms = pocket_atoms;
+    local apos  = aPos pocket_atoms;
+
+    local SCHEME = opts.scheme;
+    if isnull SCHEME then SCHEME = 'Unified'; endif
+
+    local bitmask;
+    if SCHEME == 'Unified' then
+        bitmask=476156;
+    elseif SCHEME == 'EHT' then
+        bitmask=409852;
+    endif
+
+    local [map,abits,gfbits,gfpos,oth]=
+        ph4_AnnotationRec[SCHEME,atoms,bitmask,OPT_R];
+    local [amask, gfmask] = zero [abits, gfbits];
+
+    [abits, gfbits] = bitand [[abits, gfbits], bitmask];
+
+
+    local fbits    = cat [abits, gfbits];
+    local lf_type  = pack fbits;                // active ann.pts
+    local ignore   = x_pack not fbits;          // indices of inactive
+    local imap     = unpack [x_id lf_type, 0, fbits]; // x_active=imap[x_all]
+    local [p1, p2] = ph4_AnnotationPairs [map, [ignore: ignore]];
+
+    local DL_tail = imap[p1];
+    local DL_head = imap[p2];
+
+    local lf_pos    = apt cat [apos || [abits], gfpos || [gfbits]];
+    local lf_buried = cat [amask | abits, gfmask | gfbits];
+    local lf_index  = unpack [0, x_pack not lf_buried, lf_buried];
+
+    local DL_index = lf_index;
+    local DL_atom  = zero lf_index;
+
+    local DL_x = lf_pos(1);
+    local DL_y = lf_pos(2);
+    local DL_z = lf_pos(3);
+
+    local DL_bits = lf_type;
+    local DL_expr = ph4_SchemeBitsExpr [SCHEME, lf_type,[]];
+    local DL_color = ph4_SchemeBitsColor [SCHEME, lf_type];
+    local DL_buried = lf_buried;
+
+    local [annot_expr,annot_color,annot_pos]= [
+        DL_expr, DL_color, [DL_x, DL_y, DL_z]
+    ];
+
+    return [annot_expr, annot_color, annot_pos];
+endfunction
+//------------------------------------------------------------------------------
+//
+//------------------------------------------------------------------------------
+function RecAnnot [shape, rec_atoms, pocket_atoms, lig_atoms]
+    local [annot_expr, annot_color,annot_pos]= ph4_rec_annotation_points[
+            rec_atoms:      rec_atoms,
+            pocket_atoms:   pocket_atoms,
+            scheme:         'Unified'
+    ];
+    local grid0 = zero igen mul app length shape;
+    local ACC_RecAnnot = 100*one grid0;
+    local DON_RecAnnot = 100*one grid0;
+
+            // get rid of projeced points
+    local proj_msk = not (m_findmatch['*2*', annot_expr]);
+    annot_expr = annot_expr |proj_msk;
+    annot_pos  = annot_pos ||[proj_msk];
+
+            // donor points
+    local acc_idx = x_findmatch['*Acc*', annot_expr];
+    local don_idx = x_findmatch['*Don*', annot_expr];
+
+    local acc_points = tr apt get [annot_pos, [acc_idx]];
+    local don_points = tr apt get [annot_pos, [don_idx]];
+
+    local ngrid,k;
+    for k = 1, length acc_points loop
+        ngrid = grid_addrpow[grid0,shape,1,1,0.1,acc_points(k),100];
+        ACC_RecAnnot = minE[ACC_RecAnnot,ngrid];
+    endloop
+    for k = 1, length don_points loop
+        ngrid = grid_addrpow[grid0,shape,1,1,0.1,don_points(k),100];
+        DON_RecAnnot = minE[DON_RecAnnot,ngrid];
+    endloop
+
+    ACC_RecAnnot|ACC_RecAnnot>=3 = 3-EPS_M;
+    DON_RecAnnot|DON_RecAnnot>=3 = 3-EPS_M;
+
+    local info = [];
+    return [
+        ACC_RecAnnot:ACC_RecAnnot,
+        DON_RecAnnot:DON_RecAnnot
+    ];
+endfunction
+//------------------------------------------------------------------------------
+//-----------------------------  end RecAnnot ----------------------------------
+//==============================================================================
+//
+//
+//
+//
+//==============================================================================
+//--------------- LigAnnot - ligand annotation points field map =---------------
+//------------------------------------------------------------------------------
+//==============================================================================
+//------------------------------------------------------------------------------
+// function ph4_ligand_annotation_points opts
+//      given opts = [atoms:atoms, scheme:'scheme token'] function
+//      returns the ligand annotation points, colors and types (expression)
+//------------------------------------------------------------------------------
+local function ph4_lig_annotation_points opts
+
+    local SCHEME_name = opts.scheme;
+    if isnull SCHEME_name then SCHEME_name = 'Unified'; endif
+
+    local use_all= opts.use_all;
+    if isnull use_all then use_all = 1; endif
+    if use_all == 'Default' then use_all = 0; endif
+
+        // smask for scheme features - default use all non-link features
+    local smask = ph4_SchemeDefmask SCHEME_name;
+    if (SCHEME_name == 'Unified') and use_all then
+        smask=508924;
+    endif
+    if (SCHEME_name == 'EHT') and use_all then
+        smask=442620;
+    endif
+
+    local a     = opts.atoms;   // atom keys to annotate
+    if isnull a then a = _Atoms 'ligand'; endif
+    if isnull a then return; endif
+    local apos = aPos a;
+
+    local optL  = [ use_Hs:1 ]; // hard-code default
+    local [map,abits,gfbits,oth]=ph4_AnnotationMap[SCHEME_name,a,smask,optL];
+    local [gfpos]= ph4_AnnotationPos [map, [apos], optL];
+
+    local atom_feature_pos = aPos (a|abits);
+    local proj_feature_pos = gfpos;
+    local fbits   = cat[abits, gfbits];
+    local lf_type = pack fbits;
+
+    local eopt=[];
+    local annot_expr  = ph4_SchemeBitsExpr [SCHEME_name, lf_type, eopt];
+    local annot_pos   = apt cat[atom_feature_pos,proj_feature_pos];
+    local annot_color = ph4_ExprColor [SCHEME_name,annot_expr];
+
+        //!! hack - find shortest and shave off others!!
+    local nobj = min app length [annot_expr, annot_color, annot_pos(1)];
+    annot_expr = keep[annot_expr, nobj];
+    annot_color = keep[annot_color, nobj];
+    annot_pos   = apt keep[annot_pos, nobj];
+        // end hack!!!!!!
+
+    return [annot_expr, annot_color,annot_pos];
+endfunction
+//------------------------------------------------------------------------------
+//
+//------------------------------------------------------------------------------
+function LigAnnot [shape, rec_atoms, pocket_atoms, lig_atoms];
+    local [annot_expr, annot_color,annot_pos]= ph4_lig_annotation_points[
+            atoms:lig_atoms,scheme:'Unified'
+    ];
+    local grid0 = zero igen mul app length shape;
+            // get rid of projeced points
+    local proj_msk = not (m_findmatch['*2*', annot_expr]);
+    annot_color= annot_color | proj_msk;
+    annot_expr = annot_expr  | proj_msk;
+    annot_pos  = annot_pos  ||[proj_msk];
+
+    local hyd_idx = x_findmatch[ '*Hyd*', annot_expr];
+    local aro_idx = x_findmatch[['*Aro*', '*PiR*'], annot_expr];
+    local acc_idx = x_findmatch[ '*Acc*', annot_expr];
+    local don_idx = x_findmatch[ '*Don*', annot_expr];
+
+    local hyd_expr = annot_expr[hyd_idx];
+    local aro_expr = annot_expr[aro_idx];
+    local acc_expr = annot_expr[acc_idx];
+    local don_expr = annot_expr[don_idx];
+
+    local hyd_pos = tr apt get [annot_pos, [hyd_idx]];
+    local aro_pos = tr apt get [annot_pos, [aro_idx]];
+    local acc_pos = tr apt get [annot_pos, [acc_idx]];
+    local don_pos = tr apt get [annot_pos, [don_idx]];
+
+    local k;
+    local HYD_LigAnnot = 100*one grid0;
+    local ACC_LigAnnot = 100*one grid0;
+    local DON_LigAnnot = 100*one grid0;
+    local ARO_LigAnnot = 100*one grid0;
+
+        // HYD keep the point grids separate
+    local nhyd  = length hyd_pos;
+    HYD_LigAnnot = rep[HYD_LigAnnot, nhyd];
+    for k = 1, nhyd loop
+        local nhyd_grid=grid_addrpow[grid0,shape,1,1,0.1,hyd_pos(k),100];
+        nhyd_grid | nhyd_grid >= 3 = 3-EPS_M;
+        HYD_LigAnnot(k)=nhyd_grid;
+    endloop
+
+
+        // ACC keep the point grids separate
+    local nacc  = length acc_pos;
+    ACC_LigAnnot = rep[ACC_LigAnnot, nacc];
+    for k = 1, nacc loop
+        local nacc_grid=grid_addrpow[grid0,shape,1,1,0.1,acc_pos(k),100];
+        nacc_grid | nacc_grid >= 3 = 3-EPS_M;
+        ACC_LigAnnot(k)=nacc_grid;
+    endloop
+
+
+        // DON keep the point grids separate
+    local ndon  = length don_pos;
+    DON_LigAnnot = rep[DON_LigAnnot, ndon];
+    for k = 1, ndon loop
+        local ndon_grid=grid_addrpow[grid0,shape,1,1,0.1,don_pos(k),100];
+        ndon_grid | ndon_grid >= 3 = 3-EPS_M;
+        DON_LigAnnot(k)=ndon_grid;
+    endloop
+
+        // ARO keep the point grids separate
+    local naro  = length aro_pos;
+    ARO_LigAnnot = rep[ARO_LigAnnot, naro];
+    for k = 1, naro loop
+        local naro_grid=grid_addrpow[grid0,shape,1,1,0.1,aro_pos(k),100];
+        naro_grid | naro_grid >= 3 = 3-EPS_M;
+        ARO_LigAnnot(k)=naro_grid;
+    endloop
+
+    local info_hyd = [expr:hyd_expr, pos:tr hyd_pos, idx:hyd_idx];
+    local info_aro = [expr:aro_expr, pos:tr aro_pos, idx:aro_idx];
+    local info_acc = [expr:acc_expr, pos:tr acc_pos, idx:acc_idx];
+    local info_don = [expr:don_expr, pos:tr don_pos, idx:don_idx];
+
+    return [
+        HYD_LigAnnot:HYD_LigAnnot,
+        ARO_LigAnnot:ARO_LigAnnot,
+        ACC_LigAnnot:ACC_LigAnnot,
+        DON_LigAnnot:DON_LigAnnot
+     ];
+
+endfunction
+//------------------------------------------------------------------------------
+//-----------------------------  end LigAnnot ----------------------------------
+//==============================================================================
+//
+//
+//
+//
+//==============================================================================
+//---------------- LigDistance - ligand distance field -------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+function LigDistance [shape, rec_atoms, pocket_atons, lig_atoms];
+    local grid0 = zero igen mul app length shape;
+    local grid0_LigDistance =   100*one grid0;
+    local k;
+    for k = 1, length lig_atoms loop
+        local nlig=grid_addrpow[grid0,shape,1,1,0.1,aPos lig_atoms(k),100];
+        grid0_LigDistance =minE[grid0_LigDistance,nlig];
+    endloop
+    grid0_LigDistance |grid0_LigDistance >= 3 = 3-EPS_M;
+
+    local info = [];
+
+    return [
+            HYD_LigDistance:grid0_LigDistance,
+            ACC_LigDistance:grid0_LigDistance,
+            DON_LigDistance:grid0_LigDistance
+    ];
+endfunction
+//------------------------------------------------------------------------------
+//-----------------------------  end LigDistance -------------------------------
+//==============================================================================
+//
+//
+//
+//
+//==============================================================================
+//-------------------------- CST = Contact Statistics  -------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+function cst_ProbabilityMap;
+function CST [shape, rec_atoms, pocket_atoms, lig_atoms]
+    local rec = pocket_atoms | rIsAmino aResidue pocket_atoms;
+    local [cst_HYD, cst_LPA] = cst_ProbabilityMap [shape, rec];
+
+        // fat contact stats - eliminate low-prob spurious regions
+        // (especially extra shell in Contact statistics) and then add 1A
+        // gaussian to fields
+    local cst_HYD_idx = x_pack (cst_HYD >= 0.9);
+    local cst_HYD_90 = cst_HYD[cst_HYD_idx];
+    cst_HYD | cst_HYD < 0.9 = 0;
+    local xyz_HYD = grid_coord[shape , cst_HYD_idx];
+    cst_HYD = grid_addgauss [cst_HYD, shape, 15.0, 1.5, xyz_HYD, 0.85];
+    cst_HYD | cst_HYD > 1 = 0.9;
+    cst_HYD[cst_HYD_idx]= cst_HYD_90;
+
+
+    local cst_LPA_idx = x_pack (cst_LPA >= 0.9);
+    local cst_LPA_90 = cst_LPA[cst_LPA_idx];
+    cst_LPA | cst_LPA < 0.9 = 0;
+    local xyz_LPA = grid_coord[shape , cst_LPA_idx];
+    cst_LPA = grid_addgauss [cst_LPA, shape, 15.0, 1.5, xyz_LPA, 0.85];
+    cst_LPA | cst_LPA > 1 = 0.9;
+    cst_LPA[cst_LPA_idx]= cst_LPA_90;
+
+
+    cst_HYD = 100*cst_HYD;
+    cst_LPA = 100*cst_LPA;
+
+    local info = [];
+    return [
+            HYD_CST:cst_HYD,
+            ACC_CST:cst_LPA,
+            DON_CST:cst_LPA,
+            ARO_CST:cst_HYD
+    ];
+endfunction
+//---------------------------- end Contact Statistics  -------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+//
+//
+//
+//
+//==============================================================================
+//-------------------------- AlphaCenters --------------------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+const ARO_ALPHA_MIN_RAD=2.2;
+const ARO_ALPHA_MAX_RAD=4.0;
+
+function AlphaCenters [shape, rec_atoms, pocket_atoms, lig_atoms]
+
+    local OTH_OPTS = [
+        prob_radius1:1.4,
+        probe_radius2:1.8,
+
+
+            // NOTE: custom AlphaSites with w_small exposed must be present
+            // in the '$MOE/custom/svl/run/' directory (otherwise the default
+            // w_small of 5 is used.
+        w_small:      2.5
+    ];
+
+    local sites = run['sitefind.svl', [rec_atoms, OTH_OPTS], 'AlphaSites'];
+    local fpos  = apt cat app cat apt tagget[sites,'fpos'];
+    local frad  = cat app cat apt tagget[sites,'frad'];
+    local actlp = cat app cat apt tagget[sites,'actlp'];
+    local [minpt,maxpt] = [app min shape,app max shape];
+    local msk  = andE ((fpos >= minpt) and (fpos <= maxpt));
+    fpos  = fpos  ||[msk];
+    frad  = frad  |  msk;
+    actlp = actlp |  msk;
+
+    local grid0 = zero igen mul app length shape;
+    local gridH_AlphaCenters = 100*one grid0;
+    local gridP_AlphaCenters = 100*one grid0;
+    local k,npts;
+    local Hcenters = tr (fpos||[actlp == 0]);
+    local Pcenters = tr (fpos||[actlp == 1]);
+    for k = 1, length Hcenters loop
+        npts=grid_addrpow[grid0,shape,1,1,0.1,Hcenters(k),100];
+        gridH_AlphaCenters =minE[gridH_AlphaCenters,npts];
+    endloop
+    gridH_AlphaCenters |gridH_AlphaCenters >= 3 = 3-EPS_M;
+
+    for k = 1, length Pcenters loop
+        npts=grid_addrpow[grid0,shape,1,1,0.1,Pcenters(k),100];
+        gridP_AlphaCenters =minE[gridP_AlphaCenters,npts];
+    endloop
+    gridP_AlphaCenters |gridP_AlphaCenters >= 3 = 3-EPS_M;
+
+
+        // now aromatics
+    local ARO_OPTS = [prob_radius1:2.0, probe_radius2:2.0];
+    sites = run['sitefind.svl', [rec_atoms, ARO_OPTS], 'AlphaSites'];
+    fpos  = apt cat app cat apt tagget[sites,'fpos'];
+    frad  = cat app cat apt tagget[sites,'frad'];
+    actlp = cat app cat apt tagget[sites,'actlp'];
+    [minpt,maxpt] = [app min shape,app max shape];
+    msk  = andE ((fpos >= minpt) and (fpos <= maxpt));
+    msk = (msk and frad > 0.5);
+    fpos  = fpos  ||[msk];
+    frad  = frad  |  msk;
+    actlp = actlp |  msk;
+
+        // keep only centeres where a 2.2 A ball is less that
+        // 10% in receptor 4 A ball is 50% in receptor
+    local r = aRadius rec_atoms;
+    local p = aPos rec_atoms;
+    local rec_grid = notnot grid_addgauss[grid0,shape, 10, 1.5*r, p, r];
+
+    local Acenters = tr fpos;
+
+    local minrad=ARO_ALPHA_MIN_RAD;
+    local maxrad=ARO_ALPHA_MAX_RAD;
+    for k = 1, length Acenters loop
+        local p0=Acenters(k);
+        local a_min =notnot grid_addgauss[grid0,shape,10,1.5*minrad,p0,minrad];
+        local a_max =notnot grid_addgauss[grid0,shape,10,1.5*maxrad,p0,maxrad];
+        local a_minS = add (a_min and rec_grid);
+        local a_maxS = add (a_max and rec_grid);
+        if ((a_minS/(add a_min)) > 0.1) or
+           ((a_maxS/(add a_max)) < 0.25) then
+           Acenters(k) = [[]];
+        endif
+    endloop
+    Acenters = tr apt cat Acenters;
+
+        // cluster into centroids
+    local clusters = xyz_clusters [tr Acenters,0.75, 'single'];
+    Acenters=[];
+    for k =1, length clusters loop
+        local cclust = clusters(k);
+        cclust = (app add cclust)/(length first cclust);
+        Acenters(k) = cclust;
+    endloop
+
+    local gridA_AlphaCenters;
+    local grid1_AlphaCenters0 = 100*one grid0;
+    for k = 1, length Acenters loop
+        npts=grid_addrpow[grid0,shape,1,1,0.1,Acenters(k),100];
+        local cg1_grid= minE[grid1_AlphaCenters0,npts];
+        cg1_grid |cg1_grid >= 3 = 3-EPS_M;
+        gridA_AlphaCenters(k) = cg1_grid;
+    endloop
+
+    local info = [];// for now...
+    return [
+            HYD_AlphaCenters:gridH_AlphaCenters,
+            ACC_AlphaCenters:gridP_AlphaCenters,
+            DON_AlphaCenters:gridP_AlphaCenters,
+            ARO_AlphaCenters:gridA_AlphaCenters
+    ];
+endfunction
+//---------------------------- end AlphaCenters  -------------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+//
+//
+//
+//==============================================================================
+//---------------------------- OmniAcceptor Field -----------------=------------
+//------------------------------------------------------------------------------
+//==============================================================================
+const MAX_CO_RAD1 = 3.5;
+const MIN_CO_RAD1 = 1.8;
+const OATOM_RAD_FACTOR1 = 0.80;
+const MAX_CO_RAD2 = 2.8;
+const MIN_CO_RAD2 = 1.5;
+const OATOM_RAD_FACTOR2 = 0.70;
+function OmniAcceptor [shape, rec_atoms, pocket_atoms, lig_atoms]
+    local omsk = orE [
+        sm_Match['O=[CQ3]',rec_atoms],
+        sm_Match['[O-]-C', rec_atoms],
+        sm_Match['[OH1][#6]', rec_atoms]
+    ];
+
+
+    local O = rec_atoms | omsk;
+    local posO = aPos O;
+    local pmsk = orE ((posO >= app min shape) and (posO <= app max shape));
+    O = O| pmsk;
+    posO = aPos O;
+    local oth_rec_atoms = diff[rec_atoms, O];
+    local posR = aPos oth_rec_atoms;
+
+        // make 2 grids of spheres around each O atom
+        // shell_1 for distance
+        // shell2 for short_range
+    local grid0 =  zero igen mul app length shape;
+    local minr1 = MIN_CO_RAD1;
+    local maxr1 = MAX_CO_RAD1;
+    local orad1   = OATOM_RAD_FACTOR1*maxr1;
+
+    local minr2 = MIN_CO_RAD2;
+    local maxr2 = MAX_CO_RAD2;
+    local orad2   = OATOM_RAD_FACTOR2*maxr2;
+
+    local gridMAX1=notnot grid_addgauss[grid0,shape,10,1.5*maxr1,posO,maxr1];
+    local gridMIN1=notnot grid_addgauss[grid0,shape,10,1.5*minr1,posO,minr1];
+    local gridREC1=notnot grid_addgauss[grid0,shape,10,2,posR,orad1];
+    local gridSHELL1 = gridMAX1 and not gridMIN1;
+    gridSHELL1 = gridSHELL1 and not gridREC1;
+
+
+    local gridMAX2 =notnot grid_addgauss[grid0,shape,10,1.5*maxr2,posO,maxr2];
+    local gridMIN2 =notnot grid_addgauss[grid0,shape,10,1.5*minr2,posO,minr2];
+    local gridREC2 = notnot grid_addgauss[grid0,shape,10,2,posR,orad2];
+    local gridSHELL2 = gridMAX2 and not gridMIN2;
+    gridSHELL2 = gridSHELL2 and not gridREC2;
+
+
+    local gridSHELL = notnot (gridSHELL1 + gridSHELL2);
+//    local gridSHELL = gridSHELL1;
+
+    local info = [];
+    return [DON_OmniAcceptor:gridSHELL];
+endfunction
+//---------------------------- end OmniAcceptor --------------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+//
+//
+//
+//==============================================================================
+//--------------------------- OmniCation Field -----------------=---------------
+//------------------------------------------------------------------------------
+//==============================================================================
+const MAX_CAT_RAD = 3.5;
+const MIN_CAT_RAD = 1.8;
+function OmniCation [shape, rec_atoms, pocket_atoms, lig_atoms]
+    local minrad = MIN_CAT_RAD;
+    local maxrad = MAX_CAT_RAD;
+
+        // LYS
+    local lys_atoms = pocket_atoms | rName aResidue pocket_atoms == 'LYS';
+    local lys_N = cat sm_MatchAtoms['[N+]', lys_atoms];
+    local posN = aPos lys_N;
+        // get fat coontact stats for LYS
+    local field_data = CST[shape, lys_N ,lys_N, lys_N];
+    local grid_LYS   = field_data.DON_CST;
+
+
+        // ARG
+    local arg_atoms = pocket_atoms | rName aResidue pocket_atoms == 'ARG';
+    local arg_AM = cat sm_MatchAtoms['[N]~[C](~[N])-N', arg_atoms];//amidinium
+    local posAM = aPos arg_AM;
+        // keep only amidiniums inside grid
+    local pmsk = orE ((posAM>= app min shape) and (posAM <= app max shape));
+    arg_AM =  arg_AM | pmsk;
+    local arg_REC = diff[arg_AM, arg_atoms];
+
+    posAM = aPos arg_AM;
+        // get fat contact stats fro ARG
+    field_data = CST[shape,arg_AM,arg_AM, arg_AM];
+    local grid_ARG_PI  = field_data.HYD_CST;
+    local grid_ARG_DON = field_data.DON_CST;
+
+
+        // REC - positions of other recetor atoms
+    local oth_rec_atoms = diff[rec_atoms, arg_AM];
+    local arg_REC_idx = indexof[arg_REC, oth_rec_atoms];
+    local posR = aPos oth_rec_atoms;
+    local radR = 0.6*maxrad*(one oth_rec_atoms);
+    radR[arg_REC_idx]=2*maxrad;         // make ARG rec atoms bigger
+
+        // make 0 grid
+    local grid0 =  zero igen mul app length shape;
+
+        // grid of 'other' receptor atoms
+    local gridREC = notnot grid_addgauss[grid0,shape,10,2,posR,radR];
+
+    local gridSHELL = notnot (grid_ARG_PI + grid_ARG_DON + grid_LYS);
+    gridSHELL = gridSHELL and not gridREC;
+    local info = [];
+    return [
+        ARO_OmniCation:gridSHELL
+    ];
+endfunction
+//---------------------------- end OmniCation ----------------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+//
+//
+//
+//==============================================================================
+//--------------------------- OmniMetal Field ------------------=---------------
+//------------------------------------------------------------------------------
+//   acceptors coordinating with metals
+//==============================================================================
+const METAL_SCALE    = 0.9; // scale metal VDW radius for inside metal
+const METAL_EXTEND   = 0.6; // metals extend this distance beyond VDW
+function OmniMetal [shape, rec_atoms, pocket_atoms, lig_atoms]
+
+        // get metal atoms in system
+    local matoms = cat sm_MatchAtoms['[#M]', Atoms[]];
+    local mpos   = aPos matoms;
+    local mradii = el_VDW_Radius aElement matoms;
+    local mrad1   = mradii * METAL_SCALE;
+    local mrad2   = mradii + METAL_EXTEND;
+
+        // make 0 grid
+    local grid0   =  zero igen mul app length shape;
+    local grid1   =  notnot grid_addgauss[grid0,shape,10,5,mpos,mrad1];
+    local grid2   =  notnot grid_addgauss[grid0,shape,10,5,mpos,mrad2];
+
+    local gridMET = (-1*grid1) + grid2;
+    local info = [];
+    return [ ACC_OmniMetal:gridMET ];
+endfunction
+//---------------------------- end OmniMetal ----------------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+//
+//
+//
+
+/*
+//==============================================================================
+//--------------------------- OmniCH Field ---------------------=---------------
+//------------------------------------------------------------------------------
+//==============================================================================
+const MAX_CH_RAD = 4.2;
+const MIN_CH_RAD = 2.3;
+global function OmniCH [shape, rec_atoms, pocket_atoms, lig_atoms]
+    local cmsk = orE [
+        sm_Match['[CH1]',rec_atoms],
+        sm_Match['[CH2]',rec_atoms],
+        sm_Match['[CH3]',rec_atoms]
+    ];
+    local CH = rec_atoms | cmsk and (not aBackbone rec_atoms);
+    local posCH = aPos CH;
+
+    local pmsk = orE ((posCH>= app min shape) and (posCH <= app max shape));
+    CH =  CH | pmsk;
+    posCH = aPos CH;
+    local oth_rec_atoms = diff[rec_atoms, CH];
+    local posR = aPos oth_rec_atoms;
+
+        // make spheres around each N+ atom , distance
+    local grid0 =  zero igen mul app length shape;
+    local minrad = MIN_CH_RAD;
+    local maxrad = MAX_CH_RAD;
+
+    local gridMAX =notnot grid_addgauss[grid0,shape,10,1.5*maxrad,posCH,maxrad];
+    local gridMIN =notnot grid_addgauss[grid0,shape,10,1.5*minrad,posCH,minrad];
+    local gridREC = notnot grid_addgauss[grid0,shape,10,2,posR,0.5*maxrad];
+    local gridSHELL = gridMAX and not gridMIN;
+    gridSHELL = gridSHELL and not gridREC;
+
+
+        // modify with annotation points as maxima
+
+    local info = [];
+    return [
+        ARO_OmniCH:gridSHELL
+    ];
+endfunction
+*/
+//---------------------------- end OmniCH --------------------------------------
+//------------------------------------------------------------------------------
+//==============================================================================
+
+
+
+
+//--------------------------- END OF FIELDS ------------------------------------
+//&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+//
+//
+//------------------------------------------------------------------------------
+// consts
+//--------------------------  GO consts for GUI --------------------------------
+const GO_ATTR = [
+    'gkey','name','color','shape','grid','style','trans','gobj','vis','level'
+];
+const GO_ACTION = [
+        'Hide', 'Show', 'Hide All', 'Show All','Hide Fields',
+        'Show Fields', 'Show Scores', 'Hide Scores'
+];
+/*
+const REC_SETS = tr [
+    ['Receptor',                'rec'   ],
+    ['Receptor+Solvent',        'rec+sol'],
+    ['Selected Atoms',          'asel'  ]
+];
+const LIG_SETS = tr[
+    ['Ligand',                  'lig'   ],
+    ['Selected Atoms',          'asel'  ],
+    ['<none>',                  ''      ]
+];
+const NEAR_SETS = tr[
+    ['Ligand',                  'lig'   ],
+    ['Selected Atoms',          'asel'  ]
+];
+*/
+
+const SOPTS = [
+    HYD_SCORE_color:icolor 'green',
+    HYD_SCORE_style:'Solid',
+    ARO_SCORE_color:icolor 'orange',
+    ARO_SCORE_style:'Solid',
+    ACC_SCORE_color:icolor 'cyan',
+    ACC_SCORE_style:'Solid',
+    DON_SCORE_color:icolor 'magenta',
+    DON_SCORE_style:'Solid'
+];
+//------------------------------------------------------------------------------
+//
+//
+//
+//------------------------------------------------------------------------------
+// statics
+//------------------------------------------------------------------------------
+static wkey;
+//------------------------------------------------------------------------------
+//
+//
+//------------------------------------------------------------------------------
+// functions to import from property_field_consensus_hotspot.svl
+//------------------------------------------------------------------------------
+function property_field_consensus_hotspot_Const;
+function property_field_consensus_hotspot_CalcOpts;
+function property_field_consensus_hotspot_InitializeAtoms;
+function property_field_consensus_hotspot_InitializeGrid;
+function property_field_consensus_hotspot_CalcFields;
+function property_field_consensus_hotspot_CalcScores;
+//------------------------------------------------------------------------------
+//
+//
+//------------------------------------------------------------------------------
+//=============================== GO FUNCTIONS =================================
+//------------------------------------------------------------------------------
+function property_field_consensus_hotspot_MakeFieldGraphics [field_data, opts];
+    local tgs = tags field_data;
+    local field_tags = diff[tgs, ['shape','gkeys']];
+
+    local shape = field_data.shape;
+    field_data = tag[field_tags, tagget[field_data, field_tags]];
+    if isnull shape or isnull field_data then return; endif
+
+        // if no GOs keys supplied then find GOs with
+        // same names and destroy
+    local c_gkeys = field_data.gkeys;
+    local make_new_gkey=0;
+    if isnull c_gkeys then
+        c_gkeys = GKeyList[];
+        local c_gnames = GTitle c_gkeys;
+        c_gkeys = cat ([c_gkeys]||[c_gnames] == field_tags);
+        if not isnull c_gkeys then GDestroy c_gkeys; endif
+        c_gkeys = [];
+        make_new_gkey=1;
+    endif
+
+    local level_tgs = findmatch['*level*', tags opts];
+    local color_tgs = findmatch['*color*', tags opts];
+    local style_tgs = findmatch['*style*', tags opts];
+    local sign_tgs  = findmatch['*sign*',  tags opts];
+
+    local i;
+    local c_gdata = [];
+    local c_glist = [];
+
+    for i = 1, length field_tags loop
+        local grid   = field_data.(field_tags(i));
+        if isnull grid then continue; endif
+        if length grid <> mul app length shape then
+            grid = minE grid; //assume multiple grids-combined with minE
+        endif
+
+        local cgdata;
+        cgdata.name  = field_tags(i);
+        local nmatch = tok_cat['*',cgdata.name,'*'];
+
+        cgdata.level  = tagget[opts, findmatch[nmatch, level_tgs]];
+        cgdata.color  = tagget[opts, findmatch[nmatch, color_tgs]];
+        cgdata.style  = tagget[opts, findmatch[nmatch, style_tgs]];
+        cgdata.sign   = tagget[opts, findmatch[nmatch, sign_tgs]];
+
+        if make_new_gkey then
+            cgdata.gkey   = GCreate cgdata.name;
+        else
+            cgdata.gkey = c_gkeys(i);
+        endif
+
+        if isnull cgdata.style then cgdata.style = 'Line'; endif
+        if (type cgdata.style)=='tok' then
+            cgdata.style = indexof[cgdata.style, STYLE];
+        endif
+        if cgdata.style==0 then cgdata.style = 2; endif
+
+        if isnull cgdata.level then cgdata.level = 0; endif
+        if isnull cgdata.color then cgdata.color = 0x00ff00; endif
+        if isnull cgdata.sign  then cgdata.sign  = 1; endif
+
+                // adjust for sign of field
+        cgdata.grid  = grid*(cgdata.sign);
+        cgdata.level = cgdata.level*(cgdata.sign);
+
+            // change data sign for plotting
+        local dims = [1,2,3];
+        grid  = cgdata.grid;
+        local level = cgdata.level;
+        local style = cgdata.style;
+        local [isovtx,isoidx] = grid_iso [grid,shape,level,dims];
+        local pts   =  grid_isovtx_coord [grid, shape, isovtx, level, dims];
+        local nrmls = -grid_isovtx_grad  [grid, shape, isovtx, level, dims];
+        local idx   =  grid_isoidx_emit  [isoidx, style, -1];
+
+        GClearVertexData cgdata.gkey;
+        GVertex [cgdata.gkey, cgdata.style, idx, cgdata.color, pts, nrmls];
+
+        cgdata.gobj = first GVertexData cgdata.gkey;
+
+        c_gdata(i) = cgdata;
+        c_gkeys(i) = cgdata.gkey;
+        c_glist(i) = cgdata.name;
+    endloop
+
+    return [c_glist,c_gkeys,c_gdata];
+endfunction
+//------------------------------------------------------------------------------
+//
+//
+//------------------------------------------------------------------------------
+//========================= END GO FUNCTIONS ===================================
+//------------------------------------------------------------------------------
+local function CreateGraphicObject[
+    name, onoff, data, shape, level, color, gtype, material
+]
+
+    local gkey = GCreateUnique name;
+    if onoff === 0 then
+    return gkey;
+    endif
+    local dims = [1, 2, 3];
+    local [isovtx, isoidx] = grid_iso [data, shape, level, dims];
+    local points = grid_isovtx_coord [data, shape, isovtx, level, dims];
+    local normals = - grid_isovtx_grad [data, shape, isovtx, level, dims];
+    local idx = grid_isoidx_emit [isoidx, gtype, -1];
+    GVertex  [gkey, gtype, idx, color, points, normals];
+    GSetMaterial[gkey, material];
+    return gkey;
+endfunction
+
+local function ExpandPeriodicGrid [fshape, fgrid]
+
+        // Check whether the grid must be expanded on the right-hand
+        // axis by comparing its size to the unit cell (if periodic)
+
+    local m_size   = app length fshape;
+    local m_delta  = app last fshape - apt get [fshape, dec m_size];
+    local m_length = app last fshape - app first fshape;
+    local m_new    = [[], [], []], m_num_new = zero igen 3, i;
+
+    for i = 1, 3 loop
+        if m_length(i) < 1.0 then
+            if (m_length(i) + m_delta(i)) >= 0.999 then
+                m_num_new(i) = 1;
+                m_new(i)(1)  = first fshape(i) + 1.0;
+
+            elseif (m_length(i) + (2.0 * m_delta(i))) >= 0.999 then
+                m_num_new(i) = 2;
+                m_new(i)(1)  = last fshape(i)  + m_delta(i);
+                m_new(i)(2)  = first fshape(i) + 1.0;
+
+            else
+                m_num_new(i) = 3;
+                m_new(i)(1)  = last fshape(i)  + m_delta(i);
+                m_new(i)(2)  = first fshape(i) - m_delta(i) + 1.0;
+                m_new(i)(3)  = first fshape(i) + 1.0;
+            endif
+        endif
+    endloop
+
+    local m_new_size  = m_size + m_num_new;
+    local newfgrid    = zero igen mul m_new_size;
+    local m_m_old     = grid_s2m [m_size, igen mul m_size];
+    local m_s_new     = grid_m2s [m_new_size, m_m_old];
+
+    local newfshape   = apt cat [fshape, m_new];
+    newfgrid[m_s_new] = fgrid;
+
+        // For each "short dimension", copy the first plane to the last
+        // to enforce periodicity.  This should be first + 1.0 from above.
+        // m_s_old points to the data being copied from the old grid and
+        // m_s_new points to where it goes in the new grid.
+
+    for i = 1, 3 loop
+        if m_length(i) < 1.0 then
+            local m_mask        = (m_m_old(i) == 1);
+            local m_multi       = m_m_old || [m_mask];
+            local m_s_old       = grid_m2s [m_size, m_multi];
+
+            m_multi(i)          = m_multi(i) + dec m_new_size(i);
+            m_s_new             = grid_m2s [m_new_size, m_multi];
+            newfgrid[m_s_new]   = fgrid[m_s_old];
+        endif
+    endloop
+
+    return [newfshape, newfgrid];
+endfunction
+//
+//
+//------------------------------------------------------------------------------
+//============================= MAIN GUI========================================
+//------------------------------------------------------------------------------
+// function property_field_consensus_hotspot_Create_GUI
+//      -main function that launches a GUI for interactivly visualizing score
+//      maps and generating pharmacophore queries
+//------------------------------------------------------------------------------
+static glist, gkeys, gdata;
+static sp_gkeys, sp_glist;
+
+function silcsbio_fragmap_panel[]
+    if MOE_BATCH then return; endif
+//    if WindowShow ['PH4_FROM_FIELDS',1] then return; endif
+//    task_settitle [-1, 'PH4 AutoQuery'];
+
+        // initialize variable to hold object data
+    local field_data,field_info;
+    local score_data, sphere_data, feature_data;
+    local atom_opts, init_opts, calc_opts;
+    local  k_gkeys;
+    glist=[];
+    gkeys=[];
+    gdata=[];
+    sp_gkeys=[];
+    sp_glist=[];
+
+    local nlist, nkeys, ndata;
+    local typ_display_glist, gvalid;
+
+        // trigger-type wild cards
+    local v_trigs = ['*level*', '*center','*style*','*color*'];
+    local s_trigs = ['*level*', '*center'];
+
+    local i, PAGES;
+    local cpage=[];
+    local default_opts=[];
+    for i = 1, length FRAGMAPS_ENABLED loop
+        local maptype = FRAGMAPS_ENABLED(i);
+        local map_default = cat tagget[FRAGMAPS_AVAILABLE, maptype];
+
+        local new_widget = [
+            Hbox: [ columns:4,
+                Checkbox:[
+                    name:tok_cat[maptype, '_use'],
+                    title:tagget[map_default, 'label'],
+                    titleFont:'mediumBold',
+                    onTrigger:'return'
+                ],
+                Color: [name:tok_cat[maptype, '_color'],onTrigger:'return'],
+                Option:[
+                    name:tok_cat[maptype,'_style'],text:rotl STYLE,
+                    onTrigger:'return'
+                ],
+                Scale: [
+                    name:tok_cat [maptype, '_level'],onTrigger:'return',
+                    len:5, width:5, range: [-2.4, 2.4, 0.1]
+                ]
+            ],
+            Data: [ name:tok_cat [maptype, '_data'] ]
+        ];
+        local opts = [
+            tag[tok_cat[maptype, '_use'], tagget[map_default, 'visible']],
+            tag[tok_cat[maptype, '_color'], icolor tagget[map_default, 'color']],
+            tag[tok_cat[maptype, '_style'], 'Line'],
+            tag[tok_cat[maptype, '_level'], tagget[map_default, 'level']]
+        ];
+        cpage = append[cpage, new_widget];
+        default_opts = cat[default_opts, opts];
+    endloop
+    cpage = cat cpage;
+    default_opts = cat default_opts;
+
+    local panel = [
+        title:'SilcsBio FragMap Plugin', name:'shell',
+        windowName:'PROPERTY_FIELD_CONSENSUS',
+        text:[
+            'Show FragMap',
+            'Close'
+        ],
+        onTrigger:['return','exit'],
+        Vbox:[
+        Option:[
+            name:'rec_atoms', title:'Receptor Atoms:', text:REC_SETS(1),
+            extendH:1
+        ],
+        Option:[
+            name:'lig_atoms', title:'Ligand Atoms:', text:LIG_SETS(1),
+            extendH:1
+        ],
+        Option:[
+            name:'near_atoms', title:'Near Atoms:', text:NEAR_SETS(1),
+            extendH:1
+        ]
+        ],
+        Hbox:[columns:1,flushLeft:1,extendV:1,
+            Hbox:[columns:1, flushLeft:1, extendH:1, shadow:'etched-out',
+                Vbox: cpage
+            ]
+        ]
+    ];
+
+    wkey = WindowCreate panel;
+
+    local all_opts  = property_field_consensus_hotspot_Const [];
+    /*
+    default_opts = findmatch[
+        ['*use','*color','*level','*Rad','*file', '*center','*vols*'],
+        tags all_opts
+    ];
+    default_opts = tag[default_opts, app first tagget[all_opts,default_opts]];
+    */
+
+    WindowSetData[wkey,default_opts ];
+    WindowShow wkey;
+
+    //===========================================================
+    //--- fork task to kill graphics if main window closes ------
+    //===========================================================
+    if second task_fork [master:'none', idle:1] == 'child' then
+        loop
+            if not WindowKey wkey then
+                if not isnull gkeys then
+                    gkeys = gkeys | notnot GKey gkeys;
+                    gkeys = cat gkeys; app GDestroy gkeys;
+                endif
+                if not isnull sp_gkeys then
+                    sp_gkeys = sp_gkeys | notnot GKey sp_gkeys;
+                    sp_gkeys = cat sp_gkeys; app GDestroy sp_gkeys;
+                endif
+                exit[];
+            endif
+            sleep 0.3;
+        endloop
+    endif
+    //----------------------------------------------------------
+
+
+    //===========================================================
+    // --------------MAIN GUI EVENT LOOP-------------------------
+    //===========================================================
+    // local i;
+    local nR,nG;
+    local nfield_data, nfield_info;
+    local nglist,ngkeys,ngdata;
+    loop
+        local [vals,trig]= WindowWait wkey;
+        vals = tagcat[vals, all_opts];
+        opts = vals;
+        print trig;
+
+        //------------------------------------------------------
+        // Compute all property fields and score maps based on
+        // panel options (
+        //------------------------------------------------------
+        if trig == 'shell' and vals.shell == 'Show FragMap' then
+            print 'hello';
+
+            local msg = Message [0, 'Reading external grid...'];
+            local fcell, flabel, fskew, mean, sd, min_max;
+            local gr_fshape, gr_fgrid, gr_snewshape, gr_snewgrid, gmin, gmax;
+            local gr_toXYZ, gr_toFrac, gr_newfshape, gr_newfgrid;
+            local grid_file = 'maps/3fly.apolar.gfe.map.cns';
+
+            local [result, rcode] = task_call ['fread_CNS', grid_file,
+                [errmsg: 'ignore', idle: 1]
+            ];
+            [gr_fgrid, gr_fshape, fcell, flabel, [mean,sd]] = result;
+
+            print fcell;
+
+            [gr_toXYZ, gr_toFrac] = CellMatrices poke [fcell, 1, 'P1'];
+            [gr_newfshape, gr_newfgrid] =
+                ExpandPeriodicGrid [gr_fshape, gr_fgrid];
+            print gr_newfgrid;
+            print gr_newfshape;
+
+/*
+    // local gvar = GVar gkey;
+
+        // local cur_vis = GVisible gkey;
+        GSetVisible [gkey, 1];
+        for 3 loop
+            sleep 0.3;  // gkey will live: it was GOpen in the event loop
+            GSetVisible [gkey, 1];
+        endloop
+        */
+    // local tgs = tags field_data;
+    local tgs = tags [];
+    local field_tags = diff[tgs, ['shape','gkeys']];
+
+        local grid = gr_newfgrid;
+        local shape = gr_newfshape;
+
+    field_data = [];
+    local c_gkeys = field_data.gkeys;
+    local make_new_gkey=0;
+    if isnull c_gkeys then
+        c_gkeys = GKeyList[];
+        local c_gnames = GTitle c_gkeys;
+        c_gkeys = cat ([c_gkeys]||[c_gnames] == field_tags);
+        if not isnull c_gkeys then GDestroy c_gkeys; endif
+        c_gkeys = [];
+        make_new_gkey=1;
+    endif
+
+        local cgdata;
+        cgdata.name = 'apolar_fragmap';
+        cgdata.level = -1.2;
+        cgdata.color = icolor 'green';
+        cgdata.style = 'Line';
+        cgdata.sign = 1;
+
+        if make_new_gkey then
+            cgdata.gkey   = GCreate cgdata.name;
+        else
+            cgdata.gkey = c_gkeys(i);
+        endif
+
+        if isnull cgdata.style then cgdata.style = 'Line'; endif
+        if (type cgdata.style)=='tok' then
+            cgdata.style = indexof[cgdata.style, STYLE];
+        endif
+        if cgdata.style==0 then cgdata.style = 2; endif
+
+        if isnull cgdata.level then cgdata.level = 0; endif
+        if isnull cgdata.color then cgdata.color = 0x00ff00; endif
+        if isnull cgdata.sign  then cgdata.sign  = 1; endif
+
+                // adjust for sign of field
+        cgdata.grid  = grid*(cgdata.sign);
+        cgdata.level = cgdata.level*(cgdata.sign);
+
+            // change data sign for plotting
+        local dims = [1,2,3];
+        grid  = cgdata.grid;
+        local level = cgdata.level;
+        local style = cgdata.style;
+        local [isovtx,isoidx] = grid_iso [grid,shape,level,dims];
+        local pts   =  grid_isovtx_coord [grid, shape, isovtx, level, dims];
+        local nrmls = -grid_isovtx_grad  [grid, shape, isovtx, level, dims];
+        local idx   =  grid_isoidx_emit  [isoidx, style, -1];
+
+        GClearVertexData cgdata.gkey;
+        GVertex [cgdata.gkey, cgdata.style, idx, cgdata.color, pts, nrmls];
+
+        cgdata.gobj = first GVertexData cgdata.gkey;
+
+                GSetVisible[cgdata.gkey, 1];
+                GSetTransparency[cgdata.gkey, 0];
+
+            Message [msg, []];
+
+/*
+        // if no GOs keys supplied then find GOs with
+        // same names and destroy
+    // local tgs = tags field_data;
+    local tgs = tags [];
+    local field_tags = diff[tgs, ['shape','gkeys']];
+    local shape = fshape;
+
+    field_data = [];
+    local c_gkeys = field_data.gkeys;
+    local make_new_gkey=0;
+    if isnull c_gkeys then
+        c_gkeys = GKeyList[];
+        local c_gnames = GTitle c_gkeys;
+        c_gkeys = cat ([c_gkeys]||[c_gnames] == field_tags);
+        if not isnull c_gkeys then GDestroy c_gkeys; endif
+        c_gkeys = [];
+        make_new_gkey=1;
+    endif
+
+        // local grid   = field_data.(field_tags(i));
+        local grid = fgrid;
+        local cgdata;
+        cgdata.name = 'apolar_fragmap';
+        cgdata.level = -1.2;
+        cgdata.color = icolor 'green';
+        cgdata.style = 'Line';
+        cgdata.sign = 1;
+        cgdata.name  = field_tags(i);
+        local nmatch = tok_cat['*',cgdata.name,'*'];
+
+        cgdata.level  = tagget[opts, findmatch[nmatch, level_tgs]];
+        cgdata.color  = tagget[opts, findmatch[nmatch, color_tgs]];
+        cgdata.style  = tagget[opts, findmatch[nmatch, style_tgs]];
+        cgdata.sign   = tagget[opts, findmatch[nmatch, sign_tgs]];
+
+        if make_new_gkey then
+            cgdata.gkey   = GCreate cgdata.name;
+        else
+            cgdata.gkey = c_gkeys(i);
+        endif
+
+        if isnull cgdata.style then cgdata.style = 'Line'; endif
+        if (type cgdata.style)=='tok' then
+            cgdata.style = indexof[cgdata.style, STYLE];
+        endif
+        if cgdata.style==0 then cgdata.style = 2; endif
+
+        if isnull cgdata.level then cgdata.level = 0; endif
+        if isnull cgdata.color then cgdata.color = 0x00ff00; endif
+        if isnull cgdata.sign  then cgdata.sign  = 1; endif
+
+                // adjust for sign of field
+        cgdata.grid  = grid*(cgdata.sign);
+        cgdata.level = cgdata.level*(cgdata.sign);
+
+            // change data sign for plotting
+        local dims = [1,2,3];
+        grid  = cgdata.grid;
+        local level = cgdata.level;
+        local style = cgdata.style;
+        local [isovtx,isoidx] = grid_iso [grid,shape,level,dims];
+        local pts   =  grid_isovtx_coord [grid, shape, isovtx, level, dims];
+        local nrmls = -grid_isovtx_grad  [grid, shape, isovtx, level, dims];
+        local idx   =  grid_isoidx_emit  [isoidx, style, -1];
+
+        GClearVertexData cgdata.gkey;
+        GVertex [cgdata.gkey, cgdata.style, idx, cgdata.color, pts, nrmls];
+
+        cgdata.gobj = first GVertexData cgdata.gkey;
+
+                GSetVisible[cgdata.gkey, 1];
+                GSetTransparency[cgdata.gkey, 0];
+                */
+
+            print rcode;
+
+/*
+            // reset field and score data
+            field_data = [];
+            field_info = [];
+            score_data = [];
+
+            WindowSetAttr[wkey, [
+                    shell:[sensitive:[0,0]],
+                    glist:[text:'']
+                ]
+            ];
+
+                // get atom options and defaults
+            opts = tagcat [vals,all_opts];
+
+                // initialize
+            atom_opts = property_field_consensus_hotspot_InitializeAtoms opts;
+            if (first atom_opts) === 'Error' then
+                Warning second atom_opts;
+                WindowSetAttr[wkey, [shell:[sensitive:[1,1]]]];
+                continue;
+            endif
+
+                // find existing field/score gkeys and destroy
+            k_gkeys = gkeys | GKey gkeys;
+            if not isnull k_gkeys then app GDestroy k_gkeys; endif
+
+            local [rec_atoms,pocket_atoms,lig_atoms,near_atoms] = atom_opts;
+            opts.near_atoms = near_atoms;
+            shape = property_field_consensus_hotspot_InitializeGrid opts;
+            init_opts = [shape, rec_atoms, pocket_atoms, lig_atoms];
+
+                // get calculation options based on opts and defaults
+            calc_opts = property_field_consensus_hotspot_CalcOpts opts;
+
+                // field calculation and GOs
+            field_data = property_field_consensus_hotspot_CalcFields[
+                init_opts,calc_opts
+            ];
+            local gR=  property_field_consensus_hotspot_MakeFieldGraphics [
+                field_data,opts
+            ];
+            [glist,gkeys,gdata]=gR;
+            GSetVisible[gkeys, 0];      // hide fields
+
+                // score calculation and GOs
+            score_data   = property_field_consensus_hotspot_CalcScores [
+                field_data, vals
+            ];
+            local nRD = property_field_consensus_hotspot_MakeFieldGraphics [
+                score_data,SOPTS
+            ];
+            [nlist, nkeys, ndata]=nRD;
+                // eliminate any newly invalid gkeys
+                // catenate field and score GOs
+            gvalid = notnot GKey gkeys;
+            [glist,gkeys,gdata]=apt cat[
+                [glist|gvalid, gkeys|gvalid, gdata|gvalid],
+                [nlist,nkeys,ndata]
+            ];
+
+            typ_display_glist=findmatch[tok_cat['*',vals.u_typs,'*'],glist];
+            WindowSetAttr[wkey, [
+                shell:[sensitive:[1,1]],
+                glist:[text:typ_display_glist]
+                ]
+            ];
+            */
+            continue;
+        endif
+            //------------------------------------------------------
+
+/*
+            //------------------------------------------------------
+            // update field GO color and style
+            //------------------------------------------------------
+        local ovis, otrs;
+        if not isnull findmatch[v_trigs, trig]  then
+            if isnull field_data then continue; endif
+            if isnull score_data then continue; endif
+            if isnull glist then continue; endif
+
+                // find field data
+            local cf_name;
+            if not isnull findmatch['*center', trig] then
+                cf_name = vals.(trig);
+            else
+                local strig  = string trig;
+                cf_name= token keep[strig,(last cat indicesof["_", strig])-1];
+            endif
+
+            local cf_idx = indexof[cf_name, glist];
+            if cf_idx == 0 then continue; endif
+            local cf_gkey = gkeys[cf_idx];
+
+                // field calculation and GOs
+            local cf_data = [];
+            if not isnull findmatch ['*SCORE*', cf_name] then
+                cf_data.shape     = score_data.shape;
+                cf_data.(cf_name) = score_data.(cf_name);
+            else
+                cf_data.shape     = field_data.shape;
+                cf_data.(cf_name) = field_data.(cf_name);
+            endif
+            cf_data.gkeys     = cf_gkey;
+
+            ovis = GVisible cf_data.gkeys;
+            otrs = GTransparency cf_data.gkeys;
+            local eR = property_field_consensus_hotspot_MakeFieldGraphics[
+                cf_data,vals
+            ];
+            local [elist, ekey, edata] = eR;
+            GSetVisible[ekey, ovis];
+            GSetTransparency[ekey, otrs];
+            glist(cf_idx) = elist;
+            gkeys(cf_idx) = ekey;
+            gdata(cf_idx) = edata;
+
+                // update score if panel trigger= '*use*','*level*' or '*center
+            if not isnull findmatch[s_trigs, trig ] then
+                local cs_typ = token first wordsplit[string cf_name,"_"];
+                local cs_score = tok_cat[cs_typ, '_SCORE'];
+                local cs_match = tok_cat['*', cs_typ, '*'];
+
+                        // get all score fields for type
+                local cs_fields = findmatch[cs_match, tags field_data];
+                cs_fields = diff[cs_fields, cs_score];
+                local cs_field_data = tag[
+                    cs_fields, tagget[field_data, cs_fields]
+                ];
+
+                    // re-compute score on typ only
+                local cs_score_data=property_field_consensus_hotspot_CalcScores[
+                    cs_field_data, vals
+                ];
+                score_data.(cs_score) = cs_score_data.(cs_score);
+
+                    // get score GO and field to recompute GO
+                local cs_idx  = indexof[cs_score, glist];
+                local cs_gkey = gkeys(cs_idx);
+                cs_score_data.gkeys = cs_gkey;
+                cs_score_data.shape = score_data.shape;
+                ovis = GVisible cs_score_data.gkeys;
+                otrs = GTransparency cs_score_data.gkeys;
+                nR = property_field_consensus_hotspot_MakeFieldGraphics[
+                    cs_score_data,SOPTS
+                ];
+                [nlist, nkeys, ndata] = nR;
+                GSetVisible[nkeys, ovis];
+                GSetTransparency[nkeys, otrs];
+
+                    // catenate field and score GOs
+                glist(cs_idx) = nlist;
+                gkeys(cs_idx) = nkeys;
+                gdata(cs_idx) = ndata;
+            endif
+            continue;
+        endif
+            //------------------------------------------------------
+
+            //------------------------------------------------------
+            // field score hide/show buttons
+            //------------------------------------------------------
+        if trig == 'go_action' then
+            if isnull gkeys then continue; endif
+            local go_names = first vals.glist;
+            local cur_gkeys = get[
+                gkeys,  indexof[go_names, GTitle gkeys]
+            ];
+            local gkeys_score_msk = m_findmatch['*SCORE*', GTitle gkeys];
+            local gkeys_score = gkeys | gkeys_score_msk;
+            local gkeys_field = gkeys | not gkeys_score_msk;
+
+            if vals.go_action == 'Hide' then
+                apt GSetVisible[cur_gkeys, 0];
+            elseif vals.go_action == 'Show' then
+                apt GSetVisible[cur_gkeys, 1];
+            elseif vals.go_action == 'Hide All' then
+                apt GSetVisible[gkeys, 0];
+            elseif vals.go_action == 'Show All' then
+                apt GSetVisible[gkeys, 1];
+            elseif vals.go_action == 'Hide Fields' then
+                apt GSetVisible[gkeys_field, 0];
+            elseif vals.go_action == 'Show Fields' then
+                apt GSetVisible[gkeys_field, 1];
+            elseif vals.go_action == 'Hide Scores' then
+                apt GSetVisible[gkeys_score, 0];
+            elseif vals.go_action == 'Show Scores' then
+                apt GSetVisible[gkeys_score, 1];
+            endif
+            continue;
+        endif
+            //------------------------------------------------------
+    */
+
+
+
+    endloop
+
+    WindowDestroy wkey;
+endfunction
+//------------------------------------------------------------------------------
+//============================== END MAIN GUI ==================================
+#eof

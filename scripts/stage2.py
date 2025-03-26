@@ -6,7 +6,7 @@ from sklearn.neighbors import LocalOutlierFactor
 from scipy.stats import norm
 from imblearn.ensemble import BalancedRandomForestClassifier
 
-df = pd.read_table("data/Halgreen 2009 - Table 6.txt", sep=" ") 
+df = pd.read_table("../data/Halgreen 2009 - Table 6.txt", sep=" ") 
 
 for threshold in [0, 1]:
     df["label"] = (df["categorya"] > threshold).astype(bool)
@@ -43,7 +43,7 @@ for threshold in [0, 1]:
         metrics.append([mcc_rf, mcc_rf_pvalue, f1_rf, app_rf, threshold, "RF"])
     
     metrics_df = pd.DataFrame(metrics, columns=["MCC", "MCC p-value", "F1 Score", "Average Precision Score", "Threshold", "Model"])
-    metrics_df[["MCC", "Threshold"]].to_csv(f"outputs/cross_validation_data_threshold_{threshold}.csv")
+    metrics_df[["MCC", "Threshold"]].to_csv(f"../outputs/cross_validation_data_threshold_{threshold}.csv")
 
 confidence_cut_level = 0.5
 df["y"] = df["categorya"]>0
@@ -60,7 +60,7 @@ rf.fit(X_cleaned.values, y_cleaned)
 lof2 = LocalOutlierFactor(novelty=True)
 lof2.fit(X_cleaned.values)
 
-df_targets = pd.read_csv("outputs/sitemap_results_with_quality_metrics.csv")
+df_targets = pd.read_csv("../outputs/sitemap_results_with_quality_metrics.csv")
 df_targets["UniProtKB Gene Name ID"] = df_targets["Entry"]
 
 df_targets2 = df_targets[(df_targets["Entire Region Percent High Quality"]>=confidence_cut_level) & 
@@ -76,8 +76,8 @@ df_targets2 = df_targets2[outlier_scores > -1]
 df_targets2["rf_probs"] = rf_probs[:,1]  
 df_targets3 = df_targets2[df_targets2["rf_probs"]>=confidence_cut_level]
 
-df_gene_map = pd.read_csv("data/uniprot_ensembl_map.txt")
+df_gene_map = pd.read_csv("../data/uniprot_ensembl_map.txt")
 df_merged = df_targets3.merge(df_gene_map, on="UniProtKB Gene Name ID")
 df_hq = df_merged.drop_duplicates()
 
-df_hq[["Gene name","residues", "Entire Region Percent High Quality", "Percent High Quality"]].drop_duplicates().to_csv("outputs/final_filtered_sites.csv", index=None)
+df_hq[["Gene name","residues", "Entire Region Percent High Quality", "Percent High Quality"]].drop_duplicates().to_csv("../outputs/final_filtered_sites.csv", index=None)
