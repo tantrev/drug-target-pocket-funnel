@@ -98,7 +98,7 @@ final_model = CatBoostClassifier(
 final_model.fit(X_final, y_final)
 
 #Note the file below is excluded from the online repository to comply with Schrodinger's terms
-df_targets = pd.read_csv("../schrodinger/candidate_input_sitemap_data.csv")
+df_targets = pd.read_csv("../schrodinger/sitemap_results_with_quality_metrics.csv")
 df_targets["UniProtKB Gene Name ID"] = df_targets["Entry"]
 
 df_targets2 = df_targets[

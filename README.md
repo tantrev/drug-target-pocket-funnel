@@ -8,9 +8,8 @@ This repository contains the scripts, data, and results from the paper *"In Sili
 - Databases utilized in the filtering and analysis process
 - Intermediate and final processed data
 - Nextflow pipeline
-- FTMap simulation results of the 1F42 PDB structure
-- SILCS and SILCS-X fragment mapping results of the AlphaFold version 2 IL12B structure
-- Outputs and analysis of structural conservation across human homologs
+- FTMap simulation results of the AlphaFold IL12B and 1F42 PDB structure
+- SILCS and SILCS-X fragment mapping results of the AlphaFold IL12B structure
 
 ## Technical Details
 
@@ -20,10 +19,10 @@ This repository contains the scripts, data, and results from the paper *"In Sili
 
 ## Disclaimer
 
-Complete reproduction of the paper's pipeline involves manual steps and requires the Schrödinger Small-Molecule Drug Discovery Suite (and an appropriate license). These are not included in this repository.
+Complete reproduction of the paper's pipeline involves manual steps and requires the SchrÃ¶dinger Small-Molecule Drug Discovery Suite (and an appropriate license). These are not included in this repository.
 
-Please note that some scripts in this repository may not function properly without the appropriate `sitemap_results.csv`, `sitemap_results_with_quality_metrics.csv`, and `final_filtered_sites.csv` files. These files contain Schrödinger-specific outputs that have been excluded from the public repository to comply with the terms of Schrödinger's End User License Agreement. The affected scripts are provided for reference purposes only.
+Please note that some scripts in this repository may not function properly without the appropriate `sitemap_results.csv`, `sitemap_results_with_quality_metrics.csv`. These files contain SchrÃ¶dinger-specific outputs that have been excluded from the public repository to comply with the terms of SchrÃ¶dinger's End User License Agreement. The affected scripts are provided for reference purposes only.
 
-Accessing the complete data and code may require a Schrödinger software license. We have endeavored to provide all other non-Schrödinger files necessary to understand and reproduce our work.
+Accessing the complete data and code may require a SchrÃ¶dinger software license. We have endeavored to provide all other non-SchrÃ¶dinger files necessary to understand and reproduce our work.
 
 **Note**: This repository is provided for transparency and reproducibility purposes related to the published paper. The scripts and data are specific to this project and its unique workflow.
